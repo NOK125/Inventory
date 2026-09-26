@@ -259,7 +259,7 @@ input:disabled { background: var(--chip); color: var(--muted); }
 .info-grid small { font-size: 12.5px; }
 
 /* ---------- เบิกสินค้า: เลือกคลัง ---------- */
-.wh-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.wh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
 .wh-card {
   display: grid; gap: 14px; align-content: start; text-align: left;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
@@ -282,7 +282,7 @@ input:disabled { background: var(--chip); color: var(--muted); }
 
 /* ---------- เบิกสินค้า: เลือกสินค้า + ตะกร้า ---------- */
 .shop { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
-.wh-tabs { display: flex; gap: 6px; padding: 12px 14px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.wh-tabs { position: relative; display: flex; gap: 6px; padding: 12px 14px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .wh-tabs button {
   display: flex; align-items: center; gap: 6px; border: 0; border-bottom: 3px solid transparent; background: none;
   color: var(--muted); padding: 8px 10px 10px; white-space: nowrap; cursor: pointer; font-size: 14px;
@@ -502,7 +502,6 @@ body.auth main { padding: 0; }
 @media (max-width: 1100px) {
   .shop { grid-template-columns: minmax(0, 1fr); }
   .cart { position: static; max-height: none; }
-  .wh-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .charts, .charts.even { grid-template-columns: minmax(0, 1fr); }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inline-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -527,7 +526,7 @@ body.auth main { padding: 0; }
   .matrix-wrap { max-height: none; }
 }
 @media (max-width: 640px) {
-  .wh-grid, .types, .people { grid-template-columns: minmax(0, 1fr); }
+  .types, .people { grid-template-columns: minmax(0, 1fr); }
   .inline-form { grid-template-columns: minmax(0, 1fr) !important; }
   .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .prod-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }

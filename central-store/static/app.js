@@ -482,6 +482,10 @@ function drawShopParts() {
       const c = inCart(x);
       return `<button type="button" role="tab" aria-selected="${x.id === w.id}" data-act="wh" data-id="${x.id}">${esc(x.name)}${c ? `<span class="pill-count">${c}</span>` : ""}</button>`;
     }).join("");
+    // มีหลายคลังจนล้นแถบ: เลื่อนให้เห็นแท็บคลังที่เลือกอยู่
+    const tabs = $("#wh-tabs");
+    const sel = $("[aria-selected=true]", tabs);
+    if (sel) tabs.scrollLeft = Math.max(0, sel.offsetLeft - (tabs.clientWidth - sel.offsetWidth) / 2);
     const list = catalog.filter((i) => i.warehouse_id === w.id);
     $("#prods").innerHTML = `<div class="shop-head"><b>${esc(w.name)}</b><small>${esc(w.description || "")}</small></div>
       <div class="prod-row head"><span>รหัส</span><span>รายการ</span><span style="text-align:right">จำนวน · หน่วย</span></div>

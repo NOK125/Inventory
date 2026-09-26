@@ -150,7 +150,7 @@ input:focus{outline:2px solid #0f766e;outline-offset:-1px}
 <div style="display:grid;gap:4px;margin-right:auto"><b style="font-size:24px">เลือกคลังที่จะเบิก</b><span style="color:#62727a;font-size:15px">เลือกสินค้าได้จากหลายคลัง ระบบจะรวมทุกรายการในตะกร้าเป็นใบเบิกเดียว</span></div>
 <sc-if value="{{ c3Has }}" hint-placeholder-val="{{ false }}"><button onClick="{{ go3Co }}" style="border:0;background:#0f766e;color:#fff;font-weight:600;padding:11px 18px;border-radius:10px;cursor:pointer">ทำใบเบิก ({{ c3Count }} รายการ จาก {{ c3WhCount }} คลัง)</button></sc-if>
 </div>
-<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px">
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px">
 <sc-for list="{{ w3Cards }}" as="w" hint-placeholder-count="6">
 <button onClick="{{ w.pick }}" style="display:grid;gap:14px;align-content:start;text-align:left;background:#fff;border:1px solid #e1e8ea;border-radius:14px;padding:22px;min-height:186px;cursor:pointer" style-hover="border-color:#0f766e;box-shadow:0 8px 24px #0f2a2a1a">
 <div style="display:flex;align-items:center;justify-content:space-between"><div style="width:48px;height:48px;border-radius:12px;background:{{ w.tint }};color:{{ w.ink }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px">{{ w.ini }}</div><sc-if value="{{ w.hasCount }}" hint-placeholder-val="{{ false }}"><span style="background:#e3f2ef;color:#0f766e;font-weight:600;font-size:13px;padding:3px 10px;border-radius:99px">ในตะกร้า {{ w.count }} รายการ</span></sc-if></div>
@@ -357,7 +357,7 @@ input:focus{outline:2px solid #0f766e;outline-offset:-1px}
 </header>
 <div style="padding:36px 48px;display:grid;gap:24px">
 <div style="display:grid;gap:4px"><b style="font-size:26px">ต้องการเบิกจากคลังไหน</b><span style="color:#62727a;font-size:15px">เลือกสินค้าได้จากหลายคลัง ระบบรวมเป็นใบเบิกเดียว</span></div>
-<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px">
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px">
 <sc-for list="{{ whs }}" as="w" hint-placeholder-count="6">
 <a href="#3a" onClick="{{ w.pick }}" style="display:grid;gap:14px;align-content:start;background:#fff;border:1px solid {{ w.bd }};border-radius:14px;padding:22px;text-decoration:none;color:#1b2629;min-height:190px;box-shadow:{{ w.shadow }}" style-hover="border-color:#0f766e;box-shadow:0 8px 24px #0f2a2a1a">
 <div style="width:48px;height:48px;border-radius:12px;background:{{ w.tint }};color:{{ w.ink }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px">{{ w.initial }}</div>
@@ -708,6 +708,9 @@ const W3 = [
   { name: "คลังพัสดุ", ini: "พด", h: 40, desc: "วัสดุสำนักงาน วัสดุงานบ้าน และวัสดุทั่วไป", items: mk([
     ["SUP-001", "กระดาษ A4 80 แกรม", "รีม", 40, 10], ["SUP-002", "ปากกาลูกลื่น สีน้ำเงิน", "ด้าม", 150, 20], ["SUP-003", "แฟ้มเอกสาร", "เล่ม", 35, 10],
     ["SUP-004", "หมึกพิมพ์เลเซอร์", "ตลับ", 4, 3], ["SUP-005", "น้ำยาล้างพื้น 3.8 ลิตร", "แกลลอน", 9, 4], ["SUP-006", "ถุงขยะสีแดง (ติดเชื้อ)", "แพ็ค", 0, 5]]) },
+  { name: "คลังเทคโนโลยีสารสนเทศ", ini: "ทส", h: 320, desc: "คอมพิวเตอร์ อุปกรณ์ต่อพ่วง หมึกพิมพ์ และวัสดุไอที", items: mk([
+    ["IT-001", "เมาส์ USB", "อัน", 15, 5], ["IT-002", "คีย์บอร์ด USB", "อัน", 8, 3], ["IT-003", "หมึกพิมพ์เลเซอร์ HP 85A", "ตลับ", 6, 4],
+    ["IT-004", "สาย LAN CAT6 3 เมตร", "เส้น", 20, 5], ["IT-005", "แฟลชไดรฟ์ 32 GB", "อัน", 2, 5], ["IT-006", "กระดาษสติกเกอร์บาร์โค้ด", "ม้วน", 12, 6]]) },
 ];
 W3.forEach((w) => { w.tint = `oklch(0.94 0.04 ${w.h})`; w.ink = `oklch(0.42 0.1 ${w.h})`; });
 const REG = {
@@ -721,7 +724,7 @@ const REGB = {
   rec: [["ประเสริฐ มั่นคง", "เจ้าพนักงานธุรการ", 0], ["กมลชนก แสงทอง", "ผู้ช่วยเหลือคนไข้", 0], ["สมชาย บุญมา", "พนักงานทั่วไป", 1], ["รัตนา ชัยวงศ์", "ผู้ช่วยเหลือคนไข้", 2], ["บุญเลิศ สายทอง", "พนักงานทั่วไป", 4], ["ชุติมา พรมแก้ว", "เจ้าพนักงานธุรการ", 6]],
 };
 const D_WEEKS = [[14, 2], [12, 1], [15, 3], [13, 1], [16, 2], [14, 4], [12, 1], [15, 2], [13, 3], [14, 1], [16, 2], [15, 1]];
-const D_CATS = [["คลังยา", 412, 175], ["คลังเวชภัณฑ์มิใช่ยา", 356, 172], ["คลังพัสดุ", 248, 40], ["คลังเทคนิคการแพทย์", 173, 220], ["คลังทันตกรรม", 96, 260], ["คลังยาสมุนไพร", 64, 145]];
+const D_CATS = [["คลังยา", 412, 175], ["คลังเวชภัณฑ์มิใช่ยา", 356, 172], ["คลังพัสดุ", 248, 40], ["คลังเทคนิคการแพทย์", 173, 220], ["คลังทันตกรรม", 96, 260], ["คลังเทคโนโลยีสารสนเทศ", 71, 320], ["คลังยาสมุนไพร", 64, 145]];
 const D_DEPTS = [["ห้องฉุกเฉิน (ER)", 38, 9], ["ผู้ป่วยในชาย", 31, 5], ["งานผู้ป่วยนอก (OPD)", 29, 3], ["ผู้ป่วยในหญิง", 26, 3], ["ห้องคลอด", 18, 2], ["งานทันตกรรม", 14, 1]];
 const D_TOP = [["น้ำเกลือ NSS 1,000 มล.", "คลังยา", 320, "ขวด"], ["ถุงมือยาง ไซส์ M", "คลังเวชภัณฑ์มิใช่ยา", 210, "กล่อง"], ["ผ้าก๊อซ 3x3 นิ้ว", "คลังเวชภัณฑ์มิใช่ยา", 185, "ห่อ"], ["พาราเซตามอล 500 มก.", "คลังยา", 96, "กระปุก"], ["กระดาษ A4 80 แกรม", "คลังพัสดุ", 88, "รีม"]];
 const GROUPS = ["กลุ่มการพยาบาล", "กลุ่มงานบริการด้านปฐมภูมิ", "กลุ่มงานเทคนิคการแพทย์", "กลุ่มงานทันตกรรม", "กลุ่มงานบริหารทั่วไป"];
@@ -868,6 +871,7 @@ class Component extends DCLogic {
       ["คลังเทคนิคการแพทย์", "น้ำยาตรวจ และวัสดุห้องปฏิบัติการ", 220],
       ["คลังทันตกรรม", "วัสดุและอุปกรณ์สิ้นเปลืองงานทันตกรรม", 260],
       ["คลังพัสดุ", "วัสดุสำนักงาน วัสดุงานบ้าน และวัสดุทั่วไป", 40],
+      ["คลังเทคโนโลยีสารสนเทศ", "คอมพิวเตอร์ อุปกรณ์ต่อพ่วง หมึกพิมพ์ และวัสดุไอที", 320],
     ];
     const whName = s.wh || "คลังเวชภัณฑ์มิใช่ยา";
     const idDigits = (s.lUser || "").replace(/\D/g, "").slice(0, 13);
@@ -991,7 +995,7 @@ class Component extends DCLogic {
       dKpis: [
         { label: "ใบเบิกทั้งหมด", value: totN + totE, sub: "เฉลี่ย 16 ใบ/สัปดาห์", fg: "#1b2629" },
         { label: "เบิกฉุกเฉิน", value: totE, sub: `${Math.round((totE / (totN + totE)) * 100)}% ของใบเบิกทั้งหมด`, fg: "#b91c1c" },
-        { label: "รายการที่จ่ายออก", value: D_CATS.reduce((a, c) => a + c[1], 0).toLocaleString(), sub: "จาก 6 คลัง", fg: "#1b2629" },
+        { label: "รายการที่จ่ายออก", value: D_CATS.reduce((a, c) => a + c[1], 0).toLocaleString(), sub: "จาก 7 คลัง", fg: "#1b2629" },
         { label: "เวลาเฉลี่ยจนได้รับของ", value: "1.6 วัน", sub: "ฉุกเฉินเฉลี่ย 3 ชั่วโมง", fg: "#0f766e" },
       ],
       dWeeks: D_WEEKS.map(([n, e], i) => ({ label: "ส." + (i + 1), e, hN: Math.round((n / maxW) * 160), hE: Math.round((e / maxW) * 160) })),
@@ -1001,7 +1005,7 @@ class Component extends DCLogic {
       lTogglePw: () => this.setState({ lShow: !s.lShow }), lHref: ok ? "#2b" : "#2a",
       lSubmit: (e) => { if (!ok) { e.preventDefault(); this.setState({ lErr: true }); } },
       whName,
-      whs: WH.map(([name, desc, h]) => ({ name, desc, initial: { "คลังยา": "ยา", "คลังเวชภัณฑ์มิใช่ยา": "วช", "คลังยาสมุนไพร": "สม", "คลังเทคนิคการแพทย์": "ทน", "คลังทันตกรรม": "ทต", "คลังพัสดุ": "พด" }[name], tint: `oklch(0.94 0.04 ${h})`, ink: `oklch(0.42 0.1 ${h})`,
+      whs: WH.map(([name, desc, h]) => ({ name, desc, initial: { "คลังยา": "ยา", "คลังเวชภัณฑ์มิใช่ยา": "วช", "คลังยาสมุนไพร": "สม", "คลังเทคนิคการแพทย์": "ทน", "คลังทันตกรรม": "ทต", "คลังพัสดุ": "พด", "คลังเทคโนโลยีสารสนเทศ": "ทส" }[name], tint: `oklch(0.94 0.04 ${h})`, ink: `oklch(0.42 0.1 ${h})`,
         bd: name === whName ? "#0f766e" : "#e1e8ea", shadow: name === whName ? "0 0 0 3px #0f766e22" : "none", pick: () => this.setState({ wh: name, s3: "shop", q3: "" }) })),
       aQ: s.aQ, aSetQ: (e) => this.setState({ aQ: e.target.value }),
       aCats: cats.map((c) => ({ label: c, pick: () => this.setState({ aCat: c }), bg: c === s.aCat ? "#0f766e" : "#fff", fg: c === s.aCat ? "#fff" : "#1b2629", bd: c === s.aCat ? "#0f766e" : "#d9e1e4" })),

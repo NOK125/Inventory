@@ -18,6 +18,7 @@
     { id: 4, code: "LAB", name: "คลังเทคนิคการแพทย์", initials: "ทน", hue: 220, description: "น้ำยาตรวจ และวัสดุห้องปฏิบัติการ" },
     { id: 5, code: "DEN", name: "คลังทันตกรรม", initials: "ทต", hue: 260, description: "วัสดุและอุปกรณ์สิ้นเปลืองงานทันตกรรม" },
     { id: 6, code: "SUP", name: "คลังพัสดุ", initials: "พด", hue: 40, description: "วัสดุสำนักงาน วัสดุงานบ้าน และวัสดุทั่วไป" },
+    { id: 7, code: "IT", name: "คลังเทคโนโลยีสารสนเทศ", initials: "ทส", hue: 320, description: "คอมพิวเตอร์ อุปกรณ์ต่อพ่วง หมึกพิมพ์ และวัสดุไอที" },
   ];
   // [warehouse_id, code, name, unit, qty, min_qty]
   const ITEMS = [
@@ -36,6 +37,9 @@
     [6, "SUP-001", "กระดาษ A4 80 แกรม", "รีม", 40, 10], [6, "SUP-002", "ปากกาลูกลื่น สีน้ำเงิน", "ด้าม", 150, 20],
     [6, "SUP-003", "แฟ้มเอกสาร", "เล่ม", 35, 10], [6, "SUP-004", "หมึกพิมพ์เลเซอร์", "ตลับ", 4, 3],
     [6, "SUP-005", "น้ำยาล้างพื้น 3.8 ลิตร", "แกลลอน", 9, 4], [6, "SUP-006", "ถุงขยะสีแดง (ติดเชื้อ)", "แพ็ค", 0, 5],
+    [7, "IT-001", "เมาส์ USB", "อัน", 15, 5], [7, "IT-002", "คีย์บอร์ด USB", "อัน", 8, 3],
+    [7, "IT-003", "หมึกพิมพ์เลเซอร์ HP 85A", "ตลับ", 6, 4], [7, "IT-004", "สาย LAN CAT6 3 เมตร", "เส้น", 20, 5],
+    [7, "IT-005", "แฟลชไดรฟ์ 32 GB", "อัน", 2, 5], [7, "IT-006", "กระดาษสติกเกอร์บาร์โค้ด", "ม้วน", 12, 6],
   ];
 
   const db = {
@@ -115,7 +119,7 @@
       const dept = pick(deptWeight);
       const type = rnd() < (dept === 2 ? 0.3 : 0.08) ? "emergency" : "routine";
       const lines = {};
-      const pool = special[dept] ? [...special[dept], ...special[dept], ...common] : [...common, "HRB-001", "HRB-004", "LAB-004"];
+      const pool = special[dept] ? [...special[dept], ...special[dept], ...common] : [...common, "HRB-001", "HRB-004", "LAB-004", "IT-003", "IT-004", "IT-001"];
       const n = 2 + Math.floor(rnd() * 3);
       for (let j = 0; j < n; j++) lines[pick(pool)] = 1 + Math.floor(rnd() * 12);
       const created = ago(day, Math.floor(rnd() * 8));

@@ -140,6 +140,7 @@ DEFAULT_WAREHOUSES = [
     ("LAB", "คลังเทคนิคการแพทย์", "ทน", 220, "น้ำยาตรวจ และวัสดุห้องปฏิบัติการ"),
     ("DEN", "คลังทันตกรรม", "ทต", 260, "วัสดุและอุปกรณ์สิ้นเปลืองงานทันตกรรม"),
     ("SUP", "คลังพัสดุ", "พด", 40, "วัสดุสำนักงาน วัสดุงานบ้าน และวัสดุทั่วไป"),
+    ("IT", "คลังเทคโนโลยีสารสนเทศ", "ทส", 320, "คอมพิวเตอร์ อุปกรณ์ต่อพ่วง หมึกพิมพ์ และวัสดุไอที"),
 ]
 DEFAULT_POSITIONS = {
     "dept": ["พยาบาลวิชาชีพชำนาญการ", "พยาบาลวิชาชีพปฏิบัติการ", "หัวหน้างาน", "เจ้าพนักงานธุรการ",
@@ -200,9 +201,9 @@ def init_db():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
         if "must_change_password" not in cols:
             conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 1")
-        if not conn.execute("SELECT 1 FROM warehouses").fetchone():
-            conn.executemany("INSERT INTO warehouses (code, name, initials, hue, description) VALUES (?, ?, ?, ?, ?)",
-                             DEFAULT_WAREHOUSES)
+        # เพิ่มคลังตั้งต้นที่ยังไม่มี (ฐานข้อมูลเดิมได้คลังใหม่อัตโนมัติ ไม่แตะคลังที่มีอยู่)
+        conn.executemany("INSERT OR IGNORE INTO warehouses (code, name, initials, hue, description) VALUES (?, ?, ?, ?, ?)",
+                         DEFAULT_WAREHOUSES)
         if not conn.execute("SELECT 1 FROM positions").fetchone():
             conn.executemany("INSERT INTO positions (name, scope) VALUES (?, ?)",
                              [(n, s) for s, names in DEFAULT_POSITIONS.items() for n in names])
