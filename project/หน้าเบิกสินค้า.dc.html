@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<template id="__bundler_thumbnail" data-bg-color="#0f766e"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#0f766e"></rect><rect x="480" y="280" width="240" height="240" rx="48" fill="#2dd4bf"></rect><rect x="540" y="370" width="120" height="20" rx="10" fill="#0f3d3a"></rect><rect x="540" y="410" width="120" height="20" rx="10" fill="#0f3d3a"></rect></svg></template>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e7ecee;font-family:"Noto Sans Thai","Leelawadee UI","Segoe UI",Tahoma,sans-serif;color:#1b2629}
+a{color:#0f766e}a:hover{color:#0b5a54}
+input,select,button{font:inherit;color:inherit}
+input:focus{outline:2px solid #0f766e;outline-offset:-1px}
+</style>
+</helmet>
+<section style="padding:48px 48px 0;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:960px">
+<div style="font-size:13px;font-weight:600;color:#0f766e;letter-spacing:.04em">รอบที่ 4 · หน้าสำหรับ Admin คลังกลาง</div>
+<div style="font-size:26px;font-weight:700">รวมสินค้าที่ทุกหน่วยงานเบิก · อนุมัติจำนวน · ดาวน์โหลด PDF</div>
+<div style="font-size:15px;color:#62727a;text-wrap:pretty"><a href="#4a">4a</a> ตารางรวม: แถวคือสินค้า คอลัมน์คือใบเบิกของแต่ละหน่วยงาน แก้จำนวนอนุมัติได้ในช่อง ระบบรวมยอดและเทียบกับคงเหลือให้ · ลองสลับสิทธิ์เป็น "เจ้าหน้าที่หน่วยงาน" เพื่อดูว่าเข้าหน้านี้ไม่ได้</div>
+</div>
+<div id="4a" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="background:#1b2629;color:#fff;font-weight:700;font-size:14px;padding:3px 10px;border-radius:6px">4a</span><span style="font-weight:600;margin-right:12px">อนุมัติและสรุปการเบิก (Admin)</span><span style="font-size:13px;color:#62727a">ดูในสิทธิ์:</span>
+<sc-for list="{{ apRoles }}" as="t" hint-placeholder-count="2"><button onClick="{{ t.pick }}" style="border:1px solid {{ t.bd }};background:{{ t.bg }};color:{{ t.fg }};font-size:13px;padding:4px 12px;border-radius:99px;cursor:pointer;white-space:nowrap">{{ t.label }}</button></sc-for>
+</div>
+<div style="width:1280px;height:880px;position:relative;overflow:hidden;background:#f3f6f7;border-radius:12px;box-shadow:0 1px 2px #0001,0 12px 40px #0f2a2a1a;display:grid;grid-template-columns:220px minmax(0,1fr)">
+<aside style="background:#0f3d3a;color:#d6ebe8;display:flex;flex-direction:column;padding:18px 12px;gap:4px">
+<div style="display:flex;align-items:center;gap:10px;padding:0 8px 18px"><div style="width:30px;height:30px;border-radius:8px;background:#2dd4bf"></div><div style="display:grid;line-height:1.2"><b style="font-size:14.5px;color:#fff">งานบริหารเวชภัณฑ์</b><small style="font-size:11.5px;color:#9cc9c3">(คลังกลาง) · รพ.ตาพระยา</small></div></div>
+<button style="text-align:left;border:0;background:#1a5a55;color:#fff;font-weight:600;padding:9px 12px;border-radius:8px">อนุมัติและสรุปการเบิก</button>
+<sc-if value="{{ apOpen }}" hint-placeholder-val="{{ true }}"><button style="text-align:left;border:0;background:none;color:#b8d8d4;padding:9px 12px;border-radius:8px">จ่ายสินค้า</button>
+<button style="text-align:left;border:0;background:none;color:#b8d8d4;padding:9px 12px;border-radius:8px">สินค้า/สต็อก</button></sc-if>
+<button style="text-align:left;border:0;background:none;color:#b8d8d4;padding:9px 12px;border-radius:8px">Dashboard</button>
+<div style="margin-top:auto;padding:12px 8px 0;border-top:1px solid #ffffff1f;display:grid;gap:2px"><span style="font-size:14px;font-weight:600;color:#fff">{{ apUser }}</span><small style="font-size:12px;color:#9cc9c3">{{ apUserRole }}</small></div>
+</aside>
+<sc-if value="{{ apLocked }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;justify-content:center;padding:40px">
+<div style="width:460px;background:#fff;border:1px solid #e1e8ea;border-radius:16px;padding:32px;display:grid;gap:12px;justify-items:center;text-align:center">
+<div style="width:52px;height:52px;border-radius:14px;background:#fee2e2;color:#b91c1c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">ADMIN</div>
+<b style="font-size:20px">หน้านี้สำหรับผู้ดูแลคลังกลางเท่านั้น</b>
+<span style="color:#62727a;font-size:14.5px;line-height:1.6;text-wrap:pretty">บัญชีของคุณ (งานผู้ป่วยนอก) ไม่มีสิทธิ์อนุมัติจำนวนหรือดาวน์โหลดสรุปการเบิก ติดตามสถานะได้ที่ "ใบเบิกของหน่วยงาน"</span>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ apOpen }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;min-height:0;padding:22px 26px;gap:14px">
+<div style="display:flex;align-items:flex-end;gap:12px">
+<div style="display:grid;gap:2px;margin-right:auto"><div style="display:flex;align-items:center;gap:8px;font-size:13px"><span style="background:#1b2629;color:#fff;font-weight:600;padding:1px 9px;border-radius:99px;font-size:12px">ADMIN</span><span style="color:#62727a">ใบเบิกที่ส่งถึง 26/09/2569 14:00</span></div><b style="font-size:22px">อนุมัติและสรุปการเบิก</b></div>
+<button onClick="{{ apOpenPdf }}" disabled="{{ apNoApproved }}" title="ดาวน์โหลดเฉพาะใบเบิกที่อนุมัติแล้ว" style="display:flex;align-items:center;gap:8px;border:1px solid {{ apPdfBd }};background:#fff;color:{{ apPdfFg }};font-weight:600;padding:9px 14px;border-radius:9px;cursor:pointer;white-space:nowrap"><span style="font-size:10.5px;font-weight:700;background:{{ apPdfFg }};color:#fff;padding:1px 5px;border-radius:4px">PDF</span>ดาวน์โหลดสรุป ({{ apApprovedCount }} ใบ)</button>
+</div>
+<div style="display:flex;align-items:center;gap:8px">
+<sc-for list="{{ apFilters }}" as="f" hint-placeholder-count="3"><button onClick="{{ f.pick }}" style="border:1px solid {{ f.bd }};background:{{ f.bg }};color:{{ f.fg }};padding:6px 14px;border-radius:99px;font-size:13.5px;cursor:pointer;white-space:nowrap">{{ f.label }}</button></sc-for>
+<span style="margin-left:auto;font-size:13.5px;color:#62727a">รออนุมัติ <b style="color:#b45309">{{ apPending }}</b> ใบ · อนุมัติแล้ว <b style="color:#1d4ed8">{{ apApprovedCount }}</b> ใบ</span>
+</div>
+<div style="flex:1;min-height:0;background:#fff;border:1px solid #e1e8ea;border-radius:14px;overflow:auto;scrollbar-gutter:stable">
+<div style="display:grid;grid-template-columns:{{ apCols }};position:sticky;top:0;z-index:2;background:#f7f9fa;border-bottom:1px solid #e1e8ea">
+<div style="padding:10px 14px;font-size:12.5px;font-weight:600;color:#62727a;display:flex;align-items:flex-end">สินค้า \ ใบเบิก</div>
+<sc-for list="{{ apHeads }}" as="h" hint-placeholder-count="5">
+<div style="padding:10px 8px;border-left:1px solid #e1e8ea;display:grid;gap:3px;align-content:start;background:{{ h.bg }}">
+<b style="font-size:13.5px;line-height:1.25">{{ h.dept }}</b>
+<small style="font-size:11.5px;color:#62727a">{{ h.doc }} · {{ h.by }}</small>
+<div style="display:flex;gap:4px;flex-wrap:wrap"><span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:99px;background:{{ h.typeBg }};color:{{ h.typeFg }}">{{ h.typeLabel }}</span><span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:99px;background:{{ h.stBg }};color:{{ h.stFg }}">{{ h.stLabel }}</span></div>
+<sc-if value="{{ h.pending }}" hint-placeholder-val="{{ true }}"><button onClick="{{ h.approve }}" style="margin-top:2px;border:1px solid #0f766e;background:#fff;color:#0f766e;font-weight:600;font-size:12px;padding:3px 0;border-radius:7px;cursor:pointer;white-space:nowrap">อนุมัติใบนี้</button></sc-if>
+<sc-if value="{{ h.done }}" hint-placeholder-val="{{ false }}"><button onClick="{{ h.undo }}" style="margin-top:2px;border:0;background:none;color:#62727a;font-size:12px;padding:3px 0;cursor:pointer;text-decoration:underline">ยกเลิกอนุมัติ</button></sc-if>
+</div>
+</sc-for>
+<div style="padding:10px 8px;border-left:1px solid #e1e8ea;font-size:12.5px;font-weight:600;color:#62727a;text-align:right;display:flex;align-items:flex-end;justify-content:flex-end">รวมอนุมัติ</div>
+<div style="padding:10px 14px 10px 8px;font-size:12.5px;font-weight:600;color:#62727a;text-align:right;display:flex;align-items:flex-end;justify-content:flex-end">คงเหลือ</div>
+</div>
+<sc-for list="{{ apRows }}" as="r" hint-placeholder-count="9">
+<div style="display:grid;grid-template-columns:{{ apCols }};border-bottom:1px solid #edf1f2;background:{{ r.bg }}">
+<div style="padding:9px 14px;display:grid;min-width:0"><span style="font-size:14px;font-weight:500">{{ r.name }}</span><small style="font-size:12px;color:#62727a">{{ r.wh }} · {{ r.unit }}</small></div>
+<sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+<div style="padding:6px 8px;border-left:1px solid #edf1f2;display:grid;gap:1px;justify-items:end;align-content:center;background:{{ c.bg }}">
+<sc-if value="{{ c.has }}" hint-placeholder-val="{{ true }}"><input value="{{ c.val }}" onChange="{{ c.set }}" disabled="{{ c.locked }}" inputmode="numeric" style="width:100%;max-width:74px;height:32px;border:1px solid {{ c.bd }};border-radius:7px;text-align:right;padding:0 8px;font-weight:600;font-variant-numeric:tabular-nums;background:{{ c.inBg }};color:{{ c.fg }}"><small style="font-size:11px;color:#62727a">ขอ {{ c.req }}</small></sc-if>
+<sc-if value="{{ c.none }}" hint-placeholder-val="{{ false }}"><span style="color:#c3ced1">–</span></sc-if>
+</div>
+</sc-for>
+<div style="padding:9px 8px;border-left:1px solid #edf1f2;text-align:right;display:grid;align-content:center"><b style="font-variant-numeric:tabular-nums;font-size:15px;color:{{ r.totFg }}">{{ r.tot }}</b><small style="font-size:11px;color:#62727a">ขอ {{ r.totReq }}</small></div>
+<div style="padding:9px 14px 9px 8px;text-align:right;display:grid;align-content:center"><span style="font-variant-numeric:tabular-nums;font-size:14px;color:{{ r.stockFg }};font-weight:{{ r.stockW }}">{{ r.stock }}</span><sc-if value="{{ r.over }}" hint-placeholder-val="{{ false }}"><small style="font-size:11px;color:#b91c1c;font-weight:600;white-space:nowrap">เกิน {{ r.overBy }}</small></sc-if></div>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e1e8ea;border-radius:12px;padding:12px 16px">
+<label style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:600;white-space:nowrap">ผู้อนุมัติ</span><select value="{{ apApprover }}" onChange="{{ apSetApprover }}" style="height:38px;border:1px solid #d9e1e4;border-radius:9px;padding:0 10px;background:#fff;min-width:280px"><sc-for list="{{ apApproverOpts }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></label>
+<sc-if value="{{ apHasOver }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#b91c1c;text-wrap:pretty">มี {{ apOverCount }} รายการที่อนุมัติรวมเกินคงเหลือ — ปรับลดก่อนอนุมัติ</span></sc-if>
+<button onClick="{{ apApproveAll }}" disabled="{{ apBlockAll }}" style="margin-left:auto;border:0;background:{{ apAllBg }};color:#fff;font-weight:600;font-size:15px;padding:11px 20px;border-radius:10px;cursor:pointer;white-space:nowrap">อนุมัติทั้งหมดที่แสดง ({{ apPendingShown }} ใบ)</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ apPdf }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;background:#0f1d1f8c;display:flex;align-items:center;justify-content:center;gap:24px;z-index:5">
+<div style="width:540px;height:764px;background:#fff;box-shadow:0 20px 50px #0005;padding:34px 36px;display:flex;flex-direction:column;gap:10px;color:#000;font-size:11.5px">
+<div style="text-align:center;display:grid;gap:2px"><b style="font-size:15px">สรุปการอนุมัติเบิกเวชภัณฑ์และพัสดุ</b><span>งานบริหารเวชภัณฑ์ (คลังกลาง) โรงพยาบาลตาพระยา</span><span>วันที่ 26/09/2569 · ใบเบิก {{ apPdfDocs }}</span></div>
+<div style="display:grid;grid-template-columns:{{ apPdfCols }};border:1px solid #000;margin-top:6px">
+<b style="padding:4px 5px;border-right:1px solid #000">ลำดับ</b><b style="padding:4px 5px;border-right:1px solid #000">รายการ</b><b style="padding:4px 5px;border-right:1px solid #000">หน่วย</b>
+<sc-for list="{{ apPdfHeads }}" as="h" hint-placeholder-count="2"><b style="padding:4px 5px;border-right:1px solid #000;text-align:right">{{ h.short }}</b></sc-for>
+<b style="padding:4px 5px;text-align:right">รวม</b>
+<sc-for list="{{ apPdfRows }}" as="r" hint-placeholder-count="6"><span style="padding:3px 5px;border-top:1px solid #000;border-right:1px solid #000">{{ r.n }}</span><span style="padding:3px 5px;border-top:1px solid #000;border-right:1px solid #000">{{ r.name }}</span><span style="padding:3px 5px;border-top:1px solid #000;border-right:1px solid #000">{{ r.unit }}</span><sc-for list="{{ r.vals }}" as="v" hint-placeholder-count="2"><span style="padding:3px 5px;border-top:1px solid #000;border-right:1px solid #000;text-align:right">{{ v.q }}</span></sc-for><b style="padding:3px 5px;border-top:1px solid #000;text-align:right">{{ r.tot }}</b></sc-for>
+</div>
+<div style="display:grid;gap:2px;margin-top:4px"><sc-for list="{{ apPdfHeads }}" as="h" hint-placeholder-count="2"><span>{{ h.short }} = {{ h.dept }} ({{ h.doc }}, {{ h.typeLabel }}) ผู้เบิก {{ h.by }}</span></sc-for></div>
+<div style="margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:18px;text-align:center;line-height:1.9">
+<div>ลงชื่อ ................................................ ผู้อนุมัติ<br>( {{ apApproverName }} )<br>{{ apApproverPos }}</div>
+<div>ลงชื่อ ................................................ ผู้จ่าย<br>( ................................................ )<br>ตำแหน่ง ........................................</div>
+</div>
+</div>
+<div style="display:grid;gap:10px;width:220px">
+<b style="color:#fff;font-size:16px">ตัวอย่างไฟล์ PDF</b>
+<span style="color:#d6ebe8;font-size:13.5px;line-height:1.6">A4 ขาวดำ เฉพาะใบเบิกที่อนุมัติแล้ว พร้อมช่องลงชื่อ</span>
+<button onClick="{{ apDownload }}" style="border:0;background:#2dd4bf;color:#062a26;font-weight:700;padding:12px;border-radius:10px;cursor:pointer">ดาวน์โหลด PDF</button>
+<button onClick="{{ apClosePdf }}" style="border:1px solid #ffffff55;background:none;color:#fff;padding:10px;border-radius:10px;cursor:pointer">ปิด</button>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ apToast }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:50%;bottom:22px;transform:translateX(-50%);background:#1b2629;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;box-shadow:0 8px 24px #0003;z-index:6;white-space:nowrap">{{ apToastMsg }}</div></sc-if>
+</div>
+</div>
+</section>
+<section style="padding:48px 48px 0;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:960px">
+<div style="font-size:13px;font-weight:600;color:#0f766e;letter-spacing:.04em">รอบที่ 3 · ตะกร้ารวมหลายคลัง → ใบเบิกเดียว</div>
+<div style="font-size:26px;font-weight:700">เลือกสินค้าจากหลายคลัง แล้วรวมเป็นใบเบิก 1 ใบ</div>
+<div style="font-size:15px;color:#62727a;text-wrap:pretty"><a href="#3a">3a</a> ต้นแบบที่กดได้ทั้งขั้นตอน: เลือกคลัง → ใส่ตะกร้า → "เลือกสินค้าจากคลังอื่น" → ทำใบเบิก (ผู้เบิก ผู้อนุมัติ ผู้จ่าย ผู้รับ พร้อมตำแหน่ง และหมายเหตุ) → ส่ง</div>
+</div>
+<div id="3a" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="background:#1b2629;color:#fff;font-weight:700;font-size:14px;padding:3px 10px;border-radius:6px">3a</span><span style="font-weight:600;margin-right:12px">ต้นแบบขั้นตอนเบิก</span>
+<span style="font-size:13px;color:#62727a">ข้ามไปที่:</span>
+<sc-for list="{{ s3Tabs }}" as="t" hint-placeholder-count="4"><button onClick="{{ t.pick }}" style="border:1px solid {{ t.bd }};background:{{ t.bg }};color:{{ t.fg }};font-size:13px;padding:4px 12px;border-radius:99px;cursor:pointer;white-space:nowrap">{{ t.label }}</button></sc-for>
+</div>
+<div style="width:1280px;height:880px;position:relative;overflow:hidden;background:#f3f6f7;border-radius:12px;box-shadow:0 1px 2px #0001,0 12px 40px #0f2a2a1a;display:flex;flex-direction:column">
+<header style="display:flex;align-items:center;gap:24px;padding:0 24px;height:60px;background:#fff;border-bottom:1px solid #e1e8ea;flex:none">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:8px;background:#0f766e"></div><div style="display:grid;line-height:1.15"><b style="font-size:15px;color:#0f766e">งานบริหารเวชภัณฑ์ (คลังกลาง)</b><small style="font-size:11.5px;color:#62727a">โรงพยาบาลตาพระยา</small></div></div>
+<nav style="display:flex;gap:4px;flex:1">
+<button onClick="{{ go3Wh }}" style="border:0;background:{{ nav3ReqBg }};color:{{ nav3ReqFg }};font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;white-space:nowrap">เบิกสินค้า</button>
+<button onClick="{{ go3List }}" style="border:0;background:{{ nav3ListBg }};color:{{ nav3ListFg }};font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;white-space:nowrap">ใบเบิกของหน่วยงาน</button>
+</nav>
+<button onClick="{{ go3Co }}" style="display:flex;align-items:center;gap:8px;border:1px solid #0f766e;background:#fff;color:#0f766e;font-weight:600;padding:7px 14px;border-radius:9px;cursor:pointer;white-space:nowrap">ตะกร้า<span style="background:#0f766e;color:#fff;border-radius:99px;min-width:22px;padding:0 7px;font-size:12.5px;text-align:center">{{ c3Count }}</span></button>
+<div style="display:grid;text-align:right;line-height:1.2"><span style="font-size:14px;font-weight:600">สมหญิง ใจดี</span><small style="font-size:12px;color:#62727a">งานผู้ป่วยนอก (OPD)</small></div>
+</header>
+
+<sc-if value="{{ is3Wh }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow-y:auto;padding:30px 40px;display:grid;gap:22px;align-content:start">
+<div style="display:flex;align-items:flex-end;gap:16px">
+<div style="display:grid;gap:4px;margin-right:auto"><b style="font-size:24px">เลือกคลังที่จะเบิก</b><span style="color:#62727a;font-size:15px">เลือกสินค้าได้จากหลายคลัง ระบบจะรวมทุกรายการในตะกร้าเป็นใบเบิกเดียว</span></div>
+<sc-if value="{{ c3Has }}" hint-placeholder-val="{{ false }}"><button onClick="{{ go3Co }}" style="border:0;background:#0f766e;color:#fff;font-weight:600;padding:11px 18px;border-radius:10px;cursor:pointer">ทำใบเบิก ({{ c3Count }} รายการ จาก {{ c3WhCount }} คลัง)</button></sc-if>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px">
+<sc-for list="{{ w3Cards }}" as="w" hint-placeholder-count="6">
+<button onClick="{{ w.pick }}" style="display:grid;gap:14px;align-content:start;text-align:left;background:#fff;border:1px solid #e1e8ea;border-radius:14px;padding:22px;min-height:186px;cursor:pointer" style-hover="border-color:#0f766e;box-shadow:0 8px 24px #0f2a2a1a">
+<div style="display:flex;align-items:center;justify-content:space-between"><div style="width:48px;height:48px;border-radius:12px;background:{{ w.tint }};color:{{ w.ink }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px">{{ w.ini }}</div><sc-if value="{{ w.hasCount }}" hint-placeholder-val="{{ false }}"><span style="background:#e3f2ef;color:#0f766e;font-weight:600;font-size:13px;padding:3px 10px;border-radius:99px">ในตะกร้า {{ w.count }} รายการ</span></sc-if></div>
+<div style="display:grid;gap:4px"><b style="font-size:19px">{{ w.name }}</b><span style="font-size:14px;color:#62727a;line-height:1.5;text-wrap:pretty">{{ w.desc }}</span></div>
+<span style="font-size:14px;font-weight:600;color:#0f766e;margin-top:auto">เลือกสินค้า →</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ is3Shop }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;padding:20px 24px">
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;display:flex;flex-direction:column;min-height:0">
+<div style="display:flex;gap:6px;padding:12px 14px 0;border-bottom:1px solid #e1e8ea;overflow-x:auto">
+<sc-for list="{{ w3Tabs }}" as="t" hint-placeholder-count="6"><button onClick="{{ t.pick }}" style="display:flex;align-items:center;gap:6px;border:0;border-bottom:3px solid {{ t.line }};background:none;color:{{ t.fg }};font-weight:{{ t.w }};padding:8px 10px 10px;white-space:nowrap;cursor:pointer;font-size:14px">{{ t.name }}<sc-if value="{{ t.hasCount }}" hint-placeholder-val="{{ false }}"><span style="background:#0f766e;color:#fff;border-radius:99px;min-width:20px;padding:0 6px;font-size:11.5px;text-align:center">{{ t.count }}</span></sc-if></button></sc-for>
+</div>
+<div style="display:flex;gap:12px;padding:14px 18px;align-items:center">
+<div style="display:grid;gap:2px;margin-right:auto"><b style="font-size:18px">{{ w3Name }}</b><small style="color:#62727a;font-size:13px">{{ w3Desc }}</small></div>
+</div>
+<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 250px;gap:0 14px;padding:8px 18px;border-top:1px solid #e1e8ea;border-bottom:1px solid #e1e8ea;background:#f7f9fa;font-size:12.5px;font-weight:600;color:#62727a"><span>รหัส</span><span>รายการ</span><span style="text-align:right">จำนวน · หน่วย</span></div>
+<div style="flex:1;overflow-y:auto">
+<sc-for list="{{ s3Rows }}" as="r" hint-placeholder-count="6">
+<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 250px;gap:0 14px;align-items:center;padding:10px 18px;border-bottom:1px solid #edf1f2;background:{{ r.bg }}">
+<span style="font-size:13px;color:#62727a">{{ r.code }}</span>
+<span style="font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
+<div style="display:flex;justify-content:flex-end;align-items:center;gap:8px">
+<sc-if value="{{ r.out }}" hint-placeholder-val="{{ true }}"><button onClick="{{ r.inc }}" style="border:1px solid #0f766e;background:#fff;color:#0f766e;font-weight:600;padding:7px 14px;border-radius:9px;cursor:pointer;font-size:14px;white-space:nowrap" style-hover="background:#e3f2ef">+ ใส่ตะกร้า</button></sc-if>
+<sc-if value="{{ r.in }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;border:1px solid #0f766e;border-radius:9px;background:#fff;overflow:hidden">
+<button onClick="{{ r.dec }}" style="width:34px;height:36px;border:0;background:#f3f6f7;font-size:18px;cursor:pointer;color:#62727a">−</button>
+<input class="qty-input" value="{{ r.qty }}" onChange="{{ r.setQty }}" inputmode="numeric" style="width:54px;height:36px;border:0;text-align:right;padding:0 8px;font-weight:600;font-variant-numeric:tabular-nums">
+<button onClick="{{ r.inc }}" style="width:34px;height:36px;border:0;background:#f3f6f7;font-size:18px;cursor:pointer;color:#0f766e">+</button>
+</div></sc-if>
+<span style="min-width:52px;font-size:13.5px;background:#eef2f3;border-radius:6px;padding:4px 8px;text-align:center">{{ r.unit }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+<aside style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;display:flex;flex-direction:column;min-height:0">
+<div style="padding:16px 18px 10px;display:flex;align-items:baseline;justify-content:space-between"><b style="font-size:18px">ตะกร้า</b><span style="font-size:13px;color:#62727a">{{ c3Count }} รายการ · {{ c3WhCount }} คลัง</span></div>
+<div style="flex:1;overflow-y:auto;padding:0 18px;display:grid;gap:14px;align-content:start">
+<sc-if value="{{ c3Empty }}" hint-placeholder-val="{{ false }}"><div style="border:1px dashed #d9e1e4;border-radius:10px;padding:24px 16px;text-align:center;color:#62727a;font-size:14px">ยังไม่มีสินค้าในตะกร้า<br>กด "+ ใส่ตะกร้า" ที่รายการสินค้า</div></sc-if>
+<sc-for list="{{ c3Groups }}" as="g" hint-placeholder-count="2">
+<div style="display:grid">
+<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #e1e8ea"><span style="width:24px;height:24px;border-radius:6px;background:{{ g.tint }};color:{{ g.ink }};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ g.ini }}</span><b style="font-size:14px;margin-right:auto">{{ g.name }}</b><span style="font-size:12.5px;color:#62727a">{{ g.count }} รายการ</span></div>
+<sc-for list="{{ g.lines }}" as="l" hint-placeholder-count="2">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 0 8px 32px;border-bottom:1px solid #edf1f2">
+<span style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.name }}</span>
+<span style="font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">{{ l.qty }} <span style="font-weight:400;color:#62727a;font-size:13px">{{ l.unit }}</span></span>
+<button onClick="{{ l.remove }}" title="ลบ" style="width:26px;height:26px;border:0;background:none;color:#b91c1c;border-radius:6px;cursor:pointer;font-size:16px" style-hover="background:#fee2e2">×</button>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+<div style="padding:14px 18px 18px;border-top:1px solid #e1e8ea;display:grid;gap:8px">
+<button onClick="{{ go3Wh }}" style="border:1px solid #0f766e;background:#fff;color:#0f766e;font-weight:600;font-size:15px;padding:11px;border-radius:10px;cursor:pointer" style-hover="background:#e3f2ef">+ เลือกสินค้าจากคลังอื่น</button>
+<button onClick="{{ go3Co }}" disabled="{{ c3Empty }}" style="border:0;background:{{ c3BtnBg }};color:#fff;font-weight:600;font-size:15px;padding:12px;border-radius:10px;cursor:pointer">ทำใบเบิก ({{ c3Count }} รายการ) →</button>
+</div>
+</aside>
+</div>
+</sc-if>
+
+<sc-if value="{{ is3Co }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow-y:auto;padding:24px 0">
+<div style="width:900px;margin:0 auto;display:grid;gap:18px">
+<div style="display:flex;align-items:flex-end;gap:16px">
+<div style="display:grid;gap:4px;margin-right:auto"><button onClick="{{ go3Shop }}" style="justify-self:start;border:0;background:none;color:#0f766e;font-weight:600;padding:0;cursor:pointer;font-size:14px">← กลับไปเลือกสินค้า</button><b style="font-size:24px">{{ co3Title }}</b></div>
+<div style="display:grid;grid-template-columns:auto auto;gap:2px 14px;font-size:13.5px"><span style="color:#62727a">หน่วยงาน</span><b>งานผู้ป่วยนอก (OPD)</b><span style="color:#62727a">วันที่</span><b>26/09/2569 21:19</b><span style="color:#62727a">เลขที่</span><span style="color:#62727a">ออกให้เมื่อส่งใบเบิก</span></div>
+</div>
+
+<sc-if value="{{ co3Editing }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;font-size:14px;color:#78350f"><b>กำลังแก้ไขใบเบิก RQ69-0142</b><span style="margin-right:auto">แก้ไขได้จนกว่าคลังกลางจะอนุมัติ · สถานะยังเป็น "รออนุมัติ"</span><button onClick="{{ cancelEdit3 }}" style="border:1px solid #d97706;background:#fff;color:#92400e;font-weight:600;padding:5px 12px;border-radius:8px;cursor:pointer;white-space:nowrap">ยกเลิกการแก้ไข</button></div></sc-if>
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;overflow:hidden">
+<div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid #e1e8ea"><b style="font-size:16px;margin-right:auto">1. รายการที่เบิก <span style="font-weight:400;color:#62727a;font-size:14px">· {{ c3Count }} รายการ จาก {{ c3WhCount }} คลัง</span></b><button onClick="{{ go3Wh }}" style="border:0;background:none;color:#0f766e;font-weight:600;cursor:pointer;font-size:14px">+ เพิ่มจากคลังอื่น</button></div>
+<div style="display:grid;grid-template-columns:40px 100px minmax(0,1fr) 110px 80px 36px;gap:0 12px;padding:8px 18px;background:#f7f9fa;font-size:12.5px;font-weight:600;color:#62727a;border-bottom:1px solid #e1e8ea"><span>ลำดับ</span><span>รหัส</span><span>รายการ</span><span style="text-align:right">จำนวน</span><span>หน่วย</span><span></span></div>
+<sc-for list="{{ c3Groups }}" as="g" hint-placeholder-count="2">
+<div style="padding:8px 18px;background:#fbfcfc;border-bottom:1px solid #edf1f2;font-size:13px;font-weight:600;color:{{ g.ink }}">{{ g.name }}</div>
+<sc-for list="{{ g.lines }}" as="l" hint-placeholder-count="2">
+<div style="display:grid;grid-template-columns:40px 100px minmax(0,1fr) 110px 80px 36px;gap:0 12px;align-items:center;padding:7px 18px;border-bottom:1px solid #edf1f2">
+<span style="font-size:13px;color:#62727a;font-variant-numeric:tabular-nums">{{ l.n }}</span>
+<span style="font-size:13px;color:#62727a">{{ l.code }}</span>
+<span style="font-size:14.5px">{{ l.name }}</span>
+<input class="cart-qty" value="{{ l.qty }}" onChange="{{ l.setQty }}" inputmode="numeric" style="height:34px;border:1px solid #d9e1e4;border-radius:8px;text-align:right;padding:0 10px;font-weight:600;font-variant-numeric:tabular-nums">
+<span style="font-size:13.5px;color:#1b2629">{{ l.unit }}</span>
+<button onClick="{{ l.remove }}" title="ลบ" style="width:28px;height:28px;border:0;background:none;color:#b91c1c;border-radius:6px;cursor:pointer;font-size:16px" style-hover="background:#fee2e2">×</button>
+</div>
+</sc-for>
+</sc-for>
+<sc-if value="{{ c3Empty }}" hint-placeholder-val="{{ false }}"><div style="padding:20px 18px;color:#62727a;font-size:14px">ยังไม่มีรายการ</div></sc-if>
+</div>
+
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;padding:16px 18px;display:grid;gap:14px">
+<b style="font-size:16px">2. ผู้เกี่ยวข้อง</b>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+<sc-for list="{{ people3 }}" as="p" hint-placeholder-count="4">
+<div style="border:1px solid #e1e8ea;border-radius:12px;padding:14px;display:grid;gap:10px;background:#fbfcfc">
+<div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:15px">{{ p.label }}</b><sc-if value="{{ p.req }}" hint-placeholder-val="{{ false }}"><span style="color:#b91c1c;font-size:13px">*</span></sc-if><small style="color:#62727a;font-size:12.5px;margin-right:auto">{{ p.hint }}</small><sc-if value="{{ p.hasCopy }}" hint-placeholder-val="{{ false }}"><button onClick="{{ p.copy }}" style="border:0;background:none;color:#0f766e;font-weight:600;font-size:12.5px;cursor:pointer;padding:0">ใช้ข้อมูลผู้เบิก</button></sc-if></div>
+<label style="display:grid;gap:4px"><span style="font-size:12.5px;font-weight:600;color:#62727a">ชื่อ-นามสกุล · จาก{{ p.src }}</span>
+<select value="{{ p.nSel }}" onChange="{{ p.setN }}" style="height:42px;border:1px solid {{ p.bd }};background:#fff;border-radius:9px;padding:0 10px;font-size:15px;color:{{ p.nFg }};cursor:pointer">
+<option value="">— เลือกชื่อ —</option>
+<sc-for list="{{ p.nOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.label }}</option></sc-for>
+<option value="__add">+ เพิ่มชื่อใหม่…</option>
+</select></label>
+<sc-if value="{{ p.addingN }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px"><input value="{{ addVal3 }}" onChange="{{ setAddVal3 }}" placeholder="ชื่อ นามสกุล" style="flex:1;height:38px;border:1px solid #0f766e;background:#fff;border-radius:9px;padding:0 12px"><button onClick="{{ saveAdd3 }}" style="border:0;background:#0f766e;color:#fff;font-weight:600;padding:0 14px;border-radius:9px;cursor:pointer;white-space:nowrap">เพิ่มลงทะเบียน</button><button onClick="{{ cancelAdd3 }}" style="border:1px solid #d9e1e4;background:#fff;padding:0 12px;border-radius:9px;cursor:pointer;white-space:nowrap">ยกเลิก</button></div></sc-if>
+<label style="display:grid;gap:4px"><span style="font-size:12.5px;font-weight:600;color:#62727a">ตำแหน่ง</span>
+<select value="{{ p.pSel }}" onChange="{{ p.setP }}" style="height:42px;border:1px solid #d9e1e4;background:#fff;border-radius:9px;padding:0 10px;font-size:15px;color:{{ p.pFg }};cursor:pointer">
+<option value="">— เลือกตำแหน่ง —</option>
+<sc-for list="{{ p.pOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.v }}</option></sc-for>
+<option value="__add">+ เพิ่มตำแหน่งใหม่…</option>
+</select></label>
+<sc-if value="{{ p.addingP }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px"><input value="{{ addVal3 }}" onChange="{{ setAddVal3 }}" placeholder="ชื่อตำแหน่ง" style="flex:1;height:38px;border:1px solid #0f766e;background:#fff;border-radius:9px;padding:0 12px"><button onClick="{{ saveAdd3 }}" style="border:0;background:#0f766e;color:#fff;font-weight:600;padding:0 14px;border-radius:9px;cursor:pointer;white-space:nowrap">เพิ่มลงทะเบียน</button><button onClick="{{ cancelAdd3 }}" style="border:1px solid #d9e1e4;background:#fff;padding:0 12px;border-radius:9px;cursor:pointer;white-space:nowrap">ยกเลิก</button></div></sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;padding:16px 18px;display:grid;gap:10px">
+<div style="display:grid;gap:2px"><b style="font-size:16px">3. หมายเหตุถึงคลังกลาง</b><small style="color:#62727a;font-size:13px">เรื่องอื่น ๆ ที่อยากแจ้ง เช่น ต้องการด่วน ขอรับช่วงบ่าย หรือขอสินค้าทดแทนถ้าไม่มี</small></div>
+<textarea value="{{ note3 }}" onChange="{{ setNote3 }}" rows="4" placeholder="พิมพ์ข้อความถึงคลังกลาง (ไม่บังคับ)" style="border:1px solid #d9e1e4;background:#f7f9fa;border-radius:10px;padding:10px 12px;font:inherit;resize:vertical"></textarea>
+</div>
+
+<sc-if value="{{ co3Err }}" hint-placeholder-val="{{ false }}"><div style="background:#fee2e2;color:#b91c1c;border-radius:10px;padding:10px 14px;font-size:14px">{{ co3ErrMsg }}</div></sc-if>
+<div style="display:flex;justify-content:flex-end;gap:10px;padding-bottom:8px">
+<button onClick="{{ go3Shop }}" style="border:1px solid #d9e1e4;background:#fff;padding:11px 18px;border-radius:10px;cursor:pointer">กลับไปแก้ไข</button>
+<button onClick="{{ submit3 }}" style="border:0;background:#0f766e;color:#fff;font-weight:600;font-size:15px;padding:12px 24px;border-radius:10px;cursor:pointer;white-space:nowrap">{{ co3SubmitLabel }}</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ is3List }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow-y:auto;padding:28px 40px;display:grid;gap:18px;align-content:start">
+<div style="display:grid;gap:4px"><b style="font-size:24px">ใบเบิกของหน่วยงาน</b><span style="color:#62727a;font-size:15px">งานผู้ป่วยนอก (OPD) · แก้ไขหรือยกเลิกได้เฉพาะใบที่ยัง "รออนุมัติ"</span></div>
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;overflow:hidden">
+<div style="display:grid;grid-template-columns:120px 150px minmax(0,1fr) 150px 250px;gap:0 14px;padding:10px 18px;background:#f7f9fa;border-bottom:1px solid #e1e8ea;font-size:12.5px;font-weight:600;color:#62727a"><span>เลขที่</span><span>วันที่ส่ง</span><span>รายการ</span><span>สถานะ</span><span></span></div>
+<sc-for list="{{ list3 }}" as="d" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:120px 150px minmax(0,1fr) 150px 250px;gap:0 14px;align-items:center;padding:12px 18px;border-bottom:1px solid #edf1f2;font-size:14.5px">
+<b style="font-weight:600">{{ d.doc }}</b><span style="color:#62727a;font-variant-numeric:tabular-nums">{{ d.date }}</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.summary }}</span>
+<span style="justify-self:start;font-size:12.5px;font-weight:600;padding:2px 10px;border-radius:99px;background:{{ d.stBg }};color:{{ d.stFg }};white-space:nowrap">{{ d.status }}</span>
+<div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
+<sc-if value="{{ d.canEdit }}" hint-placeholder-val="{{ false }}"><button onClick="{{ d.edit }}" style="border:1px solid #0f766e;background:#fff;color:#0f766e;font-weight:600;padding:5px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;white-space:nowrap">แก้ไขใบเบิก</button><button onClick="{{ d.cancel }}" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;padding:5px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;white-space:nowrap">ยกเลิกใบเบิก</button></sc-if>
+<sc-if value="{{ d.locked }}" hint-placeholder-val="{{ true }}"><span style="font-size:12.5px;color:#62727a;white-space:nowrap">{{ d.lockNote }}</span><button style="border:1px solid #d9e1e4;background:#fff;padding:5px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;white-space:nowrap">ดู</button></sc-if>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ is3Done }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;display:flex;align-items:center;justify-content:center">
+<div style="width:520px;background:#fff;border:1px solid #e1e8ea;border-radius:16px;padding:32px;display:grid;gap:16px;justify-items:center;text-align:center">
+<div style="width:56px;height:56px;border-radius:99px;background:#dcfce7;color:#15803d;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700">✓</div>
+<div style="display:grid;gap:4px"><b style="font-size:22px">{{ done3Title }}</b><span style="color:#62727a">เลขที่ <b style="color:#1b2629">RQ69-0142</b> · {{ c3Count }} รายการ จาก {{ c3WhCount }} คลัง</span></div>
+<span style="background:#fef3c7;color:#b45309;font-weight:600;font-size:13px;padding:3px 12px;border-radius:99px">รออนุมัติ</span>
+<div style="width:100%;display:flex;align-items:center;gap:12px;background:#f2faf8;border:1px solid #cfe7e3;border-radius:12px;padding:12px 14px;text-align:left"><span style="font-size:13.5px;color:#1b2629;margin-right:auto;text-wrap:pretty">ต้องการเปลี่ยนรายการ จำนวน หรือผู้เกี่ยวข้อง? แก้ไขได้จนกว่าคลังกลางจะอนุมัติ</span><button onClick="{{ edit3 }}" style="border:1px solid #0f766e;background:#fff;color:#0f766e;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;white-space:nowrap">แก้ไขใบเบิก</button></div>
+<div style="display:flex;gap:10px;margin-top:2px"><button style="border:1px solid #d9e1e4;background:#fff;padding:10px 18px;border-radius:10px;cursor:pointer;white-space:nowrap">พิมพ์ใบเบิก</button><button onClick="{{ go3List }}" style="border:1px solid #d9e1e4;background:#fff;padding:10px 18px;border-radius:10px;cursor:pointer;white-space:nowrap">ดูใบเบิกของหน่วยงาน</button><button onClick="{{ reset3 }}" style="border:0;background:#0f766e;color:#fff;font-weight:600;padding:10px 18px;border-radius:10px;cursor:pointer;white-space:nowrap">เบิกรายการใหม่</button></div>
+</div>
+</div>
+</sc-if>
+</div>
+</div>
+</section>
+<section style="padding:48px 48px 0;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+<div style="font-size:13px;font-weight:600;color:#0f766e;letter-spacing:.04em">รอบที่ 2 · เข้าสู่ระบบ → เลือกคลัง → เบิกสินค้า</div>
+<div style="font-size:26px;font-weight:700">งานบริหารเวชภัณฑ์ (คลังกลาง)</div>
+<div style="font-size:15px;color:#62727a;text-wrap:pretty"><a href="#2a">2a</a> เข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน → <a href="#2b">2b</a> เลือกคลังที่จะเบิก → ไปที่หน้าเบิกสินค้า <a href="#1a">1a</a> / <a href="#1b">1b</a> ซึ่งจะแสดงชื่อคลังที่เลือก</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+
+<div id="2a" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px"><span style="background:#1b2629;color:#fff;font-weight:700;font-size:14px;padding:3px 10px;border-radius:6px">2a</span><span style="font-weight:600">หน้าแรก · เข้าสู่ระบบ</span></div>
+<div style="width:1280px;height:800px;overflow:hidden;background:#f3f6f7;border-radius:12px;box-shadow:0 1px 2px #0001,0 12px 40px #0f2a2a1a;display:grid;grid-template-columns:520px minmax(0,1fr)">
+<div style="background:#0f3d3a;color:#d6ebe8;padding:48px;display:flex;flex-direction:column;gap:18px">
+<div style="width:44px;height:44px;border-radius:11px;background:#2dd4bf"></div>
+<div style="margin-top:auto;display:grid;gap:10px">
+<div style="font-size:15px;color:#9cc9c3;font-weight:500">โรงพยาบาลตาพระยา</div>
+<div style="font-size:40px;line-height:1.2;font-weight:700;color:#fff;text-wrap:pretty">งานบริหารเวชภัณฑ์<br>(คลังกลาง)</div>
+<div style="font-size:16px;line-height:1.6;color:#b8d8d4;text-wrap:pretty">เบิกยา เวชภัณฑ์ และพัสดุจากคลังกลางให้หน่วยงาน ติดตามสถานะใบเบิกได้ในที่เดียว</div>
+</div>
+</div>
+<div style="display:flex;align-items:center;justify-content:center;padding:40px">
+<div style="width:400px;display:grid;gap:18px">
+<div style="display:grid;gap:4px"><b style="font-size:26px">เข้าสู่ระบบ</b><span style="color:#62727a;font-size:15px">ใช้เลขบัตรประจำตัวประชาชนของเจ้าหน้าที่</span></div>
+<label style="display:grid;gap:6px"><span style="font-size:14px;font-weight:600">เลขบัตรประจำตัวประชาชน 13 หลัก</span><input value="{{ lUser }}" onChange="{{ lSetUser }}" placeholder="x-xxxx-xxxxx-xx-x" inputmode="numeric" autocomplete="username" style="height:46px;border:1px solid {{ lUserBd }};background:#fff;border-radius:10px;padding:0 14px;font-size:18px;letter-spacing:.06em;font-variant-numeric:tabular-nums"><small style="font-size:12.5px;color:#62727a">กรอกแล้ว {{ lDigits }}/13 หลัก</small></label>
+<label style="display:grid;gap:6px"><span style="font-size:14px;font-weight:600">รหัสผ่าน</span>
+<div style="display:flex;align-items:center;border:1px solid #d9e1e4;background:#fff;border-radius:10px;overflow:hidden"><input type="{{ lPwType }}" value="{{ lPw }}" onChange="{{ lSetPw }}" placeholder="•••••" inputmode="numeric" maxlength="5" autocomplete="current-password" style="flex:1;height:44px;border:0;padding:0 14px;font-size:18px;letter-spacing:.2em"><button onClick="{{ lTogglePw }}" style="border:0;background:none;color:#0f766e;font-weight:600;font-size:13.5px;padding:0 14px;height:44px;cursor:pointer">{{ lPwLabel }}</button></div>
+<small style="font-size:12.5px;color:#62727a">รหัสผ่านคือเลข 5 ตัวท้ายของบัตรประชาชน</small></label>
+<sc-if value="{{ lErr }}" hint-placeholder-val="{{ false }}"><div style="background:#fee2e2;color:#b91c1c;border-radius:9px;padding:9px 12px;font-size:14px">{{ lErrMsg }}</div></sc-if>
+<a href="{{ lHref }}" onClick="{{ lSubmit }}" style="display:block;text-align:center;text-decoration:none;background:#0f766e;color:#fff;font-weight:600;font-size:16px;padding:13px;border-radius:10px">เข้าสู่ระบบ</a>
+<small style="color:#62727a;font-size:13.5px;text-align:center">ลืมรหัสผ่านหรือยังไม่มีบัญชี ติดต่อเจ้าหน้าที่คลังกลาง</small>
+</div>
+</div>
+</div>
+</div>
+
+<div id="2b" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px"><span style="background:#1b2629;color:#fff;font-weight:700;font-size:14px;padding:3px 10px;border-radius:6px">2b</span><span style="font-weight:600">หน้าที่ 2 · เลือกคลังที่จะเบิก</span></div>
+<div style="width:1280px;height:800px;overflow:hidden;background:#f3f6f7;border-radius:12px;box-shadow:0 1px 2px #0001,0 12px 40px #0f2a2a1a;display:flex;flex-direction:column">
+<header style="display:flex;align-items:center;gap:28px;padding:0 24px;height:60px;background:#fff;border-bottom:1px solid #e1e8ea;flex:none">
+<div style="display:flex;align-items:center;gap:10px;margin-right:auto"><div style="width:30px;height:30px;border-radius:8px;background:#0f766e"></div><div style="display:grid;line-height:1.15"><b style="font-size:15px;color:#0f766e">งานบริหารเวชภัณฑ์ (คลังกลาง)</b><small style="font-size:11.5px;color:#62727a">โรงพยาบาลตาพระยา</small></div></div>
+<div style="display:flex;align-items:center;gap:12px"><div style="display:grid;text-align:right;line-height:1.2"><span style="font-size:14px;font-weight:600">สมหญิง ใจดี</span><small style="font-size:12px;color:#62727a">งานผู้ป่วยนอก (OPD)</small></div><a href="#2a" style="border:1px solid #d9e1e4;background:#fff;padding:6px 12px;border-radius:8px;font-size:13px;color:#1b2629;text-decoration:none">ออกจากระบบ</a></div>
+</header>
+<div style="padding:36px 48px;display:grid;gap:24px">
+<div style="display:grid;gap:4px"><b style="font-size:26px">ต้องการเบิกจากคลังไหน</b><span style="color:#62727a;font-size:15px">เลือกสินค้าได้จากหลายคลัง ระบบรวมเป็นใบเบิกเดียว</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px">
+<sc-for list="{{ whs }}" as="w" hint-placeholder-count="6">
+<a href="#3a" onClick="{{ w.pick }}" style="display:grid;gap:14px;align-content:start;background:#fff;border:1px solid {{ w.bd }};border-radius:14px;padding:22px;text-decoration:none;color:#1b2629;min-height:190px;box-shadow:{{ w.shadow }}" style-hover="border-color:#0f766e;box-shadow:0 8px 24px #0f2a2a1a">
+<div style="width:48px;height:48px;border-radius:12px;background:{{ w.tint }};color:{{ w.ink }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px">{{ w.initial }}</div>
+<div style="display:grid;gap:4px"><b style="font-size:19px">{{ w.name }}</b><span style="font-size:14px;color:#62727a;line-height:1.5;text-wrap:pretty">{{ w.desc }}</span></div>
+<span style="font-size:14px;font-weight:600;color:#0f766e;margin-top:auto">เบิกจากคลังนี้ →</span>
+</a>
+</sc-for>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</section>
+<section style="padding:48px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+<div style="font-size:13px;font-weight:600;color:#0f766e;letter-spacing:.04em">รอบที่ 1 · หน้าเบิกสินค้า (คอมพิวเตอร์)</div>
+<div style="font-size:26px;font-weight:700">เลือกสินค้า ระบุจำนวน/หน่วย และนำเข้ารายการจาก Excel</div>
+<div style="font-size:15px;color:#62727a;text-wrap:pretty"><a href="#1a">1a</a> ปรับจากหน้าเดิม: ตารางสินค้า + ตะกร้าด้านขวา นำเข้า Excel ผ่านกล่องตรวจสอบ · <a href="#1b">1b</a> กรอกใบเบิกทีละแถวแบบตาราง Excel นำเข้าไฟล์แล้วแก้ในตารางเดียวกันได้ทันที — ทั้งสองแบบกดได้จริง ลองกด "นำเข้าจาก Excel"</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+
+<!-- ================= 1a ================= -->
+<div id="1a" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px"><span style="background:#1b2629;color:#fff;font-weight:700;font-size:14px;padding:3px 10px;border-radius:6px">1a</span><span style="font-weight:600">ตาราง + ตะกร้า · นำเข้าผ่านกล่องตรวจสอบ</span></div>
+<div style="width:1280px;height:880px;position:relative;overflow:hidden;background:#f3f6f7;border-radius:12px;box-shadow:0 1px 2px #0001,0 12px 40px #0f2a2a1a;display:flex;flex-direction:column">
+<header style="display:flex;align-items:center;gap:28px;padding:0 24px;height:60px;background:#fff;border-bottom:1px solid #e1e8ea;flex:none">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:8px;background:#0f766e"></div><div style="display:grid;line-height:1.15"><b style="font-size:15px;color:#0f766e">งานบริหารเวชภัณฑ์ (คลังกลาง)</b><small style="font-size:11.5px;color:#62727a">โรงพยาบาลตาพระยา</small></div></div>
+<nav style="display:flex;gap:4px;flex:1">
+<button style="border:0;background:#e3f2ef;color:#0f766e;font-weight:600;padding:7px 14px;border-radius:8px">เบิกสินค้า</button>
+<button style="border:0;background:none;color:#62727a;padding:7px 14px;border-radius:8px">ใบเบิก</button>
+</nav>
+<div style="display:flex;align-items:center;gap:12px"><div style="display:grid;text-align:right;line-height:1.2"><span style="font-size:14px;font-weight:600">สมหญิง ใจดี</span><small style="font-size:12px;color:#62727a">งานผู้ป่วยนอก (OPD)</small></div><button style="border:1px solid #d9e1e4;background:#fff;padding:6px 12px;border-radius:8px;font-size:13px">ออกจากระบบ</button></div>
+</header>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;padding:20px 24px">
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;display:flex;flex-direction:column;min-height:0">
+<div style="display:flex;align-items:center;gap:12px;padding:16px 18px 12px">
+<div style="display:grid;gap:2px;margin-right:auto"><div style="display:flex;align-items:center;gap:8px;font-size:13px"><span style="background:#e3f2ef;color:#0f766e;font-weight:600;padding:2px 10px;border-radius:99px">{{ whName }}</span><a href="#2b" style="font-weight:600">เปลี่ยนคลัง</a></div><b style="font-size:18px">เลือกสินค้า</b><small style="color:#62727a;font-size:13px">ใส่จำนวนที่ต้องการ ระบบใช้หน่วยนับตามที่กำหนดของแต่ละสินค้า</small></div>
+<button onClick="{{ aOpenImport }}" style="display:flex;align-items:center;gap:8px;border:1px solid #0f766e;background:#fff;color:#0f766e;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer" style-hover="background:#e3f2ef"><span style="font-size:10.5px;font-weight:700;background:#0f766e;color:#fff;padding:1px 5px;border-radius:4px">XLSX</span>นำเข้าจาก Excel</button>
+</div>
+<div style="display:flex;gap:10px;padding:0 18px 12px;align-items:center">
+<input value="{{ aQ }}" onChange="{{ aSetQ }}" placeholder="ค้นหาชื่อหรือรหัสสินค้า" style="flex:1;border:1px solid #d9e1e4;background:#f7f9fa;border-radius:9px;padding:9px 12px">
+<div style="display:flex;gap:6px">
+<sc-for list="{{ aCats }}" as="c" hint-placeholder-count="4"><button onClick="{{ c.pick }}" style="border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};padding:7px 12px;border-radius:99px;font-size:13px;cursor:pointer;white-space:nowrap">{{ c.label }}</button></sc-for>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 92px 212px;gap:0 14px;padding:8px 18px;border-top:1px solid #e1e8ea;border-bottom:1px solid #e1e8ea;background:#f7f9fa;font-size:12.5px;font-weight:600;color:#62727a">
+<span>รหัส</span><span>สินค้า</span><span style="text-align:right">คงเหลือ</span><span style="text-align:right">จำนวนเบิก · หน่วย</span>
+</div>
+<div style="flex:1;overflow-y:auto">
+<sc-for list="{{ aRows }}" as="r" hint-placeholder-count="8">
+<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 92px 212px;gap:0 14px;align-items:center;padding:9px 18px;border-bottom:1px solid #edf1f2;background:{{ r.bg }}">
+<span style="font-size:13px;color:#62727a;font-variant-numeric:tabular-nums">{{ r.code }}</span>
+<div style="display:grid;min-width:0"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><small style="font-size:12px;color:#62727a">{{ r.cat }}</small></div>
+<span style="text-align:right;font-variant-numeric:tabular-nums;font-size:14px;color:{{ r.stockFg }};font-weight:{{ r.stockW }}">{{ r.stockLabel }}</span>
+<div style="display:flex;justify-content:flex-end;align-items:center;gap:8px">
+<div style="display:flex;align-items:center;border:1px solid {{ r.bd }};border-radius:9px;background:#fff;overflow:hidden">
+<button onClick="{{ r.dec }}" style="width:34px;height:36px;border:0;background:#f3f6f7;font-size:18px;cursor:pointer;color:#62727a">−</button>
+<input class="qty-input" value="{{ r.qty }}" onChange="{{ r.setQty }}" placeholder="0" inputmode="numeric" style="width:56px;height:36px;border:0;text-align:right;padding:0 8px;font-weight:600;font-variant-numeric:tabular-nums;background:#fff">
+<button onClick="{{ r.inc }}" style="width:34px;height:36px;border:0;background:#f3f6f7;font-size:18px;cursor:pointer;color:#0f766e">+</button>
+</div>
+<span style="min-width:52px;font-size:13.5px;color:#1b2629;background:#eef2f3;border-radius:6px;padding:4px 8px;text-align:center">{{ r.unit }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+<aside style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;display:flex;flex-direction:column;min-height:0">
+<div style="padding:16px 18px 10px;display:flex;align-items:baseline;justify-content:space-between"><b style="font-size:18px">ใบเบิก</b><span style="font-size:13px;color:#62727a">{{ aCount }} รายการ</span></div>
+<div style="flex:1;overflow-y:auto;padding:0 18px">
+<sc-if value="{{ aEmpty }}" hint-placeholder-val="{{ false }}"><div style="border:1px dashed #d9e1e4;border-radius:10px;padding:24px 16px;text-align:center;color:#62727a;font-size:14px">ยังไม่มีรายการ<br>ใส่จำนวนในตาราง หรือนำเข้าจาก Excel</div></sc-if>
+<sc-for list="{{ aCart }}" as="l" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #edf1f2">
+<div style="display:grid;min-width:0"><span style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.name }}</span><small style="font-size:12px;color:{{ l.noteFg }}">{{ l.note }}</small></div>
+<span style="font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap">{{ l.qty }} <span style="font-weight:400;color:#62727a;font-size:13px">{{ l.unit }}</span></span>
+<button onClick="{{ l.remove }}" title="ลบ" style="width:28px;height:28px;border:0;background:none;color:#b91c1c;border-radius:6px;cursor:pointer;font-size:16px" style-hover="background:#fee2e2">×</button>
+</div>
+</sc-for>
+</div>
+<div style="padding:14px 18px 18px;border-top:1px solid #e1e8ea;display:grid;gap:10px">
+<div style="display:grid;gap:6px"><span style="font-size:13px;font-weight:600">ประเภทการเบิก <span style="color:#b91c1c">*</span> <span style="font-weight:400;color:#62727a">เลือก 1 อย่าง</span></span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+<sc-for list="{{ aTypes }}" as="t" hint-placeholder-count="2"><button onClick="{{ t.pick }}" role="checkbox" aria-checked="{{ t.on }}" style="display:flex;align-items:center;gap:8px;border:1.5px solid {{ t.bd }};background:{{ t.bg }};border-radius:9px;padding:8px 10px;text-align:left;cursor:pointer"><span style="width:20px;height:20px;border-radius:5px;border:2px solid {{ t.box }};background:{{ t.boxBg }};color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ t.tick }}</span><span style="display:grid;line-height:1.25"><span style="font-size:14px;font-weight:600;color:{{ t.fg }}">{{ t.label }}</span><small style="font-size:11.5px;color:#62727a">{{ t.sub }}</small></span></button></sc-for>
+</div>
+<sc-if value="{{ aTypeErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#b91c1c">กรุณาเลือกประเภทการเบิกก่อนส่ง</span></sc-if>
+</div>
+<label style="display:grid;gap:4px"><span style="font-size:13px;font-weight:600">ผู้เบิก</span><input value="สมหญิง ใจดี" style="border:1px solid #d9e1e4;background:#f7f9fa;border-radius:9px;padding:9px 12px"></label>
+<label style="display:grid;gap:4px"><span style="font-size:13px;font-weight:600">หมายเหตุ <span style="font-weight:400;color:#62727a">(ไม่บังคับ)</span></span><input placeholder="เช่น ใช้สำหรับคลินิกเบาหวาน" style="border:1px solid #d9e1e4;background:#f7f9fa;border-radius:9px;padding:9px 12px"></label>
+<button onClick="{{ aSubmit }}" style="margin-top:4px;border:0;background:{{ aSubmitBg }};color:#fff;font-weight:600;font-size:15px;padding:12px;border-radius:10px;cursor:pointer">{{ aSubmitLabel }}</button>
+<sc-if value="{{ aSent }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#15803d;text-align:center">ส่งใบเบิก{{ aTypeName }}แล้ว · รออนุมัติ</span></sc-if>
+</div>
+</aside>
+</div>
+
+<sc-if value="{{ aModal }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;background:#0f1d1f73;display:flex;align-items:center;justify-content:center;z-index:5">
+<div style="width:860px;max-height:780px;background:#fff;border-radius:16px;box-shadow:0 24px 60px #0004;display:flex;flex-direction:column;overflow:hidden">
+<div style="display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid #e1e8ea">
+<b style="font-size:18px;margin-right:auto">นำเข้ารายการจาก Excel</b>
+<div style="display:flex;gap:6px;font-size:12.5px;color:#62727a"><span style="padding:3px 10px;border-radius:99px;background:{{ aStep1Bg }};color:{{ aStep1Fg }};font-weight:600">1 เลือกไฟล์</span><span style="padding:3px 10px;border-radius:99px;background:{{ aStep2Bg }};color:{{ aStep2Fg }};font-weight:600">2 ตรวจสอบ</span></div>
+<button onClick="{{ aCloseImport }}" style="width:32px;height:32px;border:0;background:#f3f6f7;border-radius:8px;cursor:pointer;font-size:18px">×</button>
+</div>
+<sc-if value="{{ aIsDrop }}" hint-placeholder-val="{{ true }}">
+<div style="padding:22px;display:grid;gap:16px">
+<button onClick="{{ aPickFile }}" style="border:2px dashed #9cc9c3;background:#f2faf8;border-radius:14px;padding:44px 20px;display:grid;justify-items:center;gap:10px;cursor:pointer" style-hover="background:#e3f2ef">
+<span style="font-size:13px;font-weight:700;background:#0f766e;color:#fff;padding:6px 10px;border-radius:6px">XLSX</span>
+<span style="font-size:17px;font-weight:600">ลากไฟล์ Excel มาวางที่นี่ หรือ <span style="color:#0f766e;text-decoration:underline">เลือกไฟล์</span></span>
+<small style="color:#62727a;font-size:13px">รองรับ .xlsx .xls .csv ขนาดไม่เกิน 2 MB</small>
+</button>
+<div style="display:grid;gap:8px">
+<div style="display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px">รูปแบบคอลัมน์ในไฟล์</b><a href="#" style="font-size:13.5px;font-weight:600">ดาวน์โหลดไฟล์ต้นแบบ (.xlsx)</a></div>
+<div style="display:grid;grid-template-columns:130px 1fr 90px 90px;border:1px solid #d9e1e4;border-radius:10px;overflow:hidden;font-size:13.5px">
+<span style="background:#f3f6f7;padding:7px 10px;font-weight:600">รหัสสินค้า</span><span style="background:#f3f6f7;padding:7px 10px;font-weight:600">ชื่อสินค้า</span><span style="background:#f3f6f7;padding:7px 10px;font-weight:600;text-align:right">จำนวน</span><span style="background:#f3f6f7;padding:7px 10px;font-weight:600">หน่วย</span>
+<span style="padding:7px 10px;border-top:1px solid #e1e8ea;color:#62727a">MED-001</span><span style="padding:7px 10px;border-top:1px solid #e1e8ea;color:#62727a">ถุงมือยาง ไซส์ M</span><span style="padding:7px 10px;border-top:1px solid #e1e8ea;color:#62727a;text-align:right">5</span><span style="padding:7px 10px;border-top:1px solid #e1e8ea;color:#62727a">กล่อง</span>
+</div>
+<small style="color:#62727a;font-size:13px">ระบบจับคู่ด้วยรหัสสินค้าก่อน ถ้าไม่มีรหัสจะจับคู่ด้วยชื่อ · คอลัมน์หน่วยใช้ตรวจสอบเท่านั้น ระบบใช้หน่วยนับของคลังเสมอ</small>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ aIsPreview }}" hint-placeholder-val="{{ false }}">
+<div style="padding:14px 22px;display:flex;align-items:center;gap:10px;background:#f7f9fa;border-bottom:1px solid #e1e8ea;font-size:14px">
+<span style="font-size:10.5px;font-weight:700;background:#0f766e;color:#fff;padding:1px 5px;border-radius:4px">XLSX</span><b>เบิก_OPD_ต.ค.69.xlsx</b><span style="color:#62727a">· 7 แถว</span>
+<div style="margin-left:auto;display:flex;gap:6px"><span style="background:#dcfce7;color:#15803d;font-weight:600;font-size:12.5px;padding:3px 10px;border-radius:99px">พร้อม {{ impOk }}</span><span style="background:#fef3c7;color:#b45309;font-weight:600;font-size:12.5px;padding:3px 10px;border-radius:99px">ควรตรวจ {{ impWarn }}</span><span style="background:#fee2e2;color:#b91c1c;font-weight:600;font-size:12.5px;padding:3px 10px;border-radius:99px">ไม่นำเข้า {{ impBad }}</span></div>
+</div>
+<div style="overflow-y:auto;flex:1">
+<div style="display:grid;grid-template-columns:36px minmax(0,1.3fr) minmax(0,1.3fr) 110px minmax(0,1.2fr);gap:0 12px;padding:8px 22px;font-size:12.5px;font-weight:600;color:#62727a;border-bottom:1px solid #e1e8ea"><span>แถว</span><span>ในไฟล์</span><span>จับคู่กับสินค้าในคลัง</span><span style="text-align:right">จำนวน</span><span>ผลตรวจ</span></div>
+<sc-for list="{{ impRows }}" as="x" hint-placeholder-count="7">
+<div style="display:grid;grid-template-columns:36px minmax(0,1.3fr) minmax(0,1.3fr) 110px minmax(0,1.2fr);gap:0 12px;align-items:center;padding:10px 22px;border-bottom:1px solid #edf1f2;background:{{ x.bg }}">
+<span style="font-size:13px;color:#62727a">{{ x.n }}</span>
+<div style="display:grid;min-width:0"><span style="font-size:14px">{{ x.srcName }}</span><small style="font-size:12px;color:#62727a">{{ x.srcCode }} · {{ x.srcQty }} {{ x.srcUnit }}</small></div>
+<div style="display:grid;min-width:0"><span style="font-size:14px;font-weight:500;color:{{ x.matchFg }}">{{ x.matchName }}</span><small style="font-size:12px;color:#62727a">{{ x.matchMeta }}</small></div>
+<span style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums">{{ x.qtyLabel }}</span>
+<div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:99px;background:{{ x.dot }};flex:none"></span><span style="font-size:13px;color:{{ x.fg }};text-wrap:pretty">{{ x.note }}</span></div>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;align-items:center;gap:10px;padding:14px 22px;border-top:1px solid #e1e8ea">
+<button onClick="{{ aBackDrop }}" style="border:0;background:none;color:#0f766e;font-weight:600;cursor:pointer;margin-right:auto">เลือกไฟล์อื่น</button>
+<button onClick="{{ aCloseImport }}" style="border:1px solid #d9e1e4;background:#fff;padding:9px 16px;border-radius:9px;cursor:pointer">ยกเลิก</button>
+<button onClick="{{ aConfirm }}" style="border:0;background:#0f766e;color:#fff;font-weight:600;padding:10px 18px;border-radius:9px;cursor:pointer">เพิ่ม {{ impUse }} รายการลงใบเบิก</button>
+</div>
+</sc-if>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ aToast }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:50%;bottom:22px;transform:translateX(-50%);background:#1b2629;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;box-shadow:0 8px 24px #0003;z-index:6">เพิ่ม {{ impUse }} รายการจาก Excel แล้ว · ไม่นำเข้า {{ impBad }} รายการ</div></sc-if>
+</div>
+</div>
+
+<!-- ================= 1b ================= -->
+<div id="1b" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px"><span style="background:#1b2629;color:#fff;font-weight:700;font-size:14px;padding:3px 10px;border-radius:6px">1b</span><span style="font-weight:600">กรอกทีละแถว · Excel เข้ามาในตารางเดียวกัน</span></div>
+<div style="width:1280px;height:880px;position:relative;overflow:hidden;background:#f3f6f7;border-radius:12px;box-shadow:0 1px 2px #0001,0 12px 40px #0f2a2a1a;display:grid;grid-template-columns:220px minmax(0,1fr)">
+<aside style="background:#0f3d3a;color:#d6ebe8;display:flex;flex-direction:column;padding:18px 12px;gap:4px">
+<div style="display:flex;align-items:center;gap:10px;padding:0 8px 18px"><div style="width:30px;height:30px;border-radius:8px;background:#2dd4bf"></div><div style="display:grid;line-height:1.2"><b style="font-size:14.5px;color:#fff">งานบริหารเวชภัณฑ์</b><small style="font-size:11.5px;color:#9cc9c3">(คลังกลาง) · รพ.ตาพระยา</small></div></div>
+<sc-for list="{{ bNav }}" as="n" hint-placeholder-count="5"><sc-if value="{{ n.hasHead }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;font-weight:600;color:#7fb3ad;letter-spacing:.05em;padding:14px 12px 4px">{{ n.head }}</div></sc-if><button onClick="{{ n.pick }}" style="width:100%;text-align:left;border:0;background:{{ n.bg }};color:{{ n.fg }};font-weight:{{ n.w }};padding:9px 12px;border-radius:8px;cursor:pointer" style-hover="background:#1a5a55">{{ n.label }}</button></sc-for>
+<div style="margin-top:auto;padding:12px 8px 0;border-top:1px solid #ffffff1f;display:grid;gap:2px"><span style="font-size:14px;font-weight:600;color:#fff">สมหญิง ใจดี</span><small style="font-size:12px;color:#9cc9c3">งานผู้ป่วยนอก (OPD)</small><button style="margin-top:8px;border:1px solid #ffffff33;background:none;color:#d6ebe8;padding:6px;border-radius:8px;font-size:13px">ออกจากระบบ</button></div>
+</aside>
+<sc-if value="{{ bIsDash }}" hint-placeholder-val="{{ false }}">
+<div style="overflow-y:auto;min-height:0;padding:22px 26px;display:grid;gap:16px;align-content:start">
+<div style="display:flex;align-items:flex-end;gap:16px"><div style="display:grid;gap:2px;margin-right:auto"><small style="color:#62727a;font-size:13px">ข้อมูล 12 สัปดาห์ล่าสุด · 05/07/2569 – 26/09/2569</small><b style="font-size:22px">Dashboard วิเคราะห์การเบิก</b></div></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+<sc-for list="{{ dKpis }}" as="k" hint-placeholder-count="4"><div style="background:#fff;border:1px solid #e1e8ea;border-radius:12px;padding:14px 16px;display:grid;gap:2px"><span style="font-size:13px;color:#62727a">{{ k.label }}</span><b style="font-size:28px;font-variant-numeric:tabular-nums;color:{{ k.fg }}">{{ k.value }}</b><small style="font-size:12.5px;color:#62727a">{{ k.sub }}</small></div></sc-for>
+</div>
+<div style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px">
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:12px;padding:16px 18px;display:grid;gap:12px">
+<div style="display:flex;align-items:center;gap:14px"><b style="font-size:15px;margin-right:auto">ความถี่การเบิกฉุกเฉิน รายสัปดาห์</b><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#62727a"><span style="width:10px;height:10px;border-radius:2px;background:#dc2626"></span>ฉุกเฉิน</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#62727a"><span style="width:10px;height:10px;border-radius:2px;background:#9cc9c3"></span>ตามรอบปกติ</span></div>
+<div style="display:flex;align-items:flex-end;gap:10px;height:190px;border-bottom:1px solid #d9e1e4;padding:0 4px">
+<sc-for list="{{ dWeeks }}" as="w" hint-placeholder-count="12"><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:0"><span style="font-size:11.5px;font-weight:700;color:#b91c1c;padding-bottom:3px">{{ w.e }}</span><div style="width:100%;max-width:34px;height:{{ w.hE }}px;background:#dc2626;border-radius:4px 4px 0 0"></div><div style="width:100%;max-width:34px;height:{{ w.hN }}px;background:#9cc9c3"></div></div></sc-for>
+</div>
+<div style="display:flex;gap:10px;padding:0 4px;margin-top:-6px"><sc-for list="{{ dWeeks }}" as="w" hint-placeholder-count="12"><span style="flex:1;text-align:center;font-size:11.5px;color:#62727a">{{ w.label }}</span></sc-for></div>
+</div>
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:12px;padding:16px 18px;display:grid;gap:12px;align-content:start">
+<div style="display:grid;gap:2px"><b style="font-size:15px">สถิติการใช้สินค้าตามประเภทคลัง</b><small style="font-size:12.5px;color:#62727a">จำนวนรายการที่จ่ายออก</small></div>
+<sc-for list="{{ dCats }}" as="c" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:130px minmax(0,1fr) 44px;gap:10px;align-items:center;font-size:13.5px"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</span><div style="height:14px;background:#f0f4f5;border-radius:99px;overflow:hidden"><div style="width:{{ c.pct }}%;height:100%;background:{{ c.color }};border-radius:99px"></div></div><b style="text-align:right;font-variant-numeric:tabular-nums">{{ c.v }}</b></div></sc-for>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px">
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:12px;padding:16px 18px;display:grid;gap:12px;align-content:start">
+<div style="display:grid;gap:2px"><b style="font-size:15px">หน่วยงานที่เบิกมากที่สุด</b><small style="font-size:12.5px;color:#62727a">จำนวนใบเบิก · ส่วนสีแดงคือเบิกฉุกเฉิน</small></div>
+<sc-for list="{{ dDepts }}" as="d" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:130px minmax(0,1fr) 70px;gap:10px;align-items:center;font-size:13.5px"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.name }}</span><div style="height:14px;display:flex"><div style="width:{{ d.pctE }}%;height:100%;background:#dc2626;border-radius:99px 0 0 99px"></div><div style="width:{{ d.pctN }}%;height:100%;background:#0f766e;border-radius:0 99px 99px 0"></div></div><span style="text-align:right;font-variant-numeric:tabular-nums"><b>{{ d.v }}</b> <span style="color:#b91c1c;font-size:12px">({{ d.e }})</span></span></div></sc-for>
+</div>
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:12px;padding:16px 18px;display:grid;gap:4px;align-content:start">
+<b style="font-size:15px;padding-bottom:8px">สินค้าที่เบิกมากที่สุด</b>
+<sc-for list="{{ dTop }}" as="t" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #edf1f2"><span style="font-weight:700;color:#0f766e;font-variant-numeric:tabular-nums">{{ t.n }}</span><div style="display:grid;min-width:0"><span style="font-size:14px;font-weight:500">{{ t.name }}</span><small style="font-size:12px;color:#62727a">{{ t.wh }}</small></div><span style="font-variant-numeric:tabular-nums;font-weight:600">{{ t.q }} <span style="font-weight:400;color:#62727a;font-size:13px">{{ t.unit }}</span></span></div></sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ bIsReg }}" hint-placeholder-val="{{ false }}">
+<div style="overflow-y:auto;min-height:0;padding:22px 26px;display:grid;gap:16px;align-content:start">
+<div style="display:flex;align-items:flex-end;gap:16px"><div style="display:grid;gap:2px;margin-right:auto"><small style="color:#62727a;font-size:13px">ทะเบียน · ใช้เป็นรายการให้เลือกในใบเบิก</small><b style="font-size:22px">{{ bRegTitle }}</b></div><button onClick="{{ bAddOpen }}" style="border:0;background:#0f766e;color:#fff;font-weight:600;padding:10px 16px;border-radius:9px;cursor:pointer;white-space:nowrap">+ เพิ่มรายชื่อ</button></div>
+<sc-if value="{{ bAdding }}" hint-placeholder-val="{{ false }}"><div style="background:#fff;border:1.5px solid #0f766e;border-radius:12px;padding:14px 16px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,1fr) auto;gap:10px;align-items:end">
+<label style="display:grid;gap:4px"><span style="font-size:12.5px;font-weight:600;color:#62727a">ชื่อ-นามสกุล</span><input value="{{ bNewName }}" onChange="{{ bSetNewName }}" placeholder="ชื่อ นามสกุล" style="height:40px;border:1px solid #d9e1e4;border-radius:9px;padding:0 12px"></label>
+<label style="display:grid;gap:4px"><span style="font-size:12.5px;font-weight:600;color:#62727a">ตำแหน่ง</span><select value="{{ bNewPos }}" onChange="{{ bSetNewPos }}" style="height:40px;border:1px solid #d9e1e4;border-radius:9px;padding:0 10px;background:#fff"><sc-for list="{{ bPosOpts }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.v }}</option></sc-for></select></label>
+<label style="display:grid;gap:4px"><span style="font-size:12.5px;font-weight:600;color:#62727a">หน่วยงาน</span><select value="{{ bNewDept }}" onChange="{{ bSetNewDept }}" style="height:40px;border:1px solid #d9e1e4;border-radius:9px;padding:0 10px;background:#fff"><sc-for list="{{ bDeptOpts }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.v }}</option></sc-for></select></label>
+<div style="display:flex;gap:6px"><button onClick="{{ bAddSave }}" style="height:40px;border:0;background:#0f766e;color:#fff;font-weight:600;padding:0 16px;border-radius:9px;cursor:pointer;white-space:nowrap">บันทึก</button><button onClick="{{ bAddClose }}" style="height:40px;border:1px solid #d9e1e4;background:#fff;padding:0 14px;border-radius:9px;cursor:pointer;white-space:nowrap">ยกเลิก</button></div>
+</div></sc-if>
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:12px;overflow:hidden">
+<div style="display:grid;grid-template-columns:56px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr) 120px;gap:0 14px;padding:10px 18px;background:#f7f9fa;border-bottom:1px solid #e1e8ea;font-size:12.5px;font-weight:600;color:#62727a"><span>ลำดับ</span><span>ชื่อ-นามสกุล</span><span>ตำแหน่ง</span><span>หน่วยงาน</span><span></span></div>
+<sc-for list="{{ bRegRows }}" as="p" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:56px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr) 120px;gap:0 14px;align-items:center;padding:11px 18px;border-bottom:1px solid #edf1f2;font-size:14.5px"><span style="color:#62727a;font-variant-numeric:tabular-nums">{{ p.n }}</span><b style="font-weight:500">{{ p.name }}</b><span>{{ p.pos }}</span><span style="color:#62727a">{{ p.dept }}</span><div style="display:flex;gap:6px;justify-content:flex-end"><button style="border:1px solid #d9e1e4;background:#fff;padding:4px 10px;border-radius:7px;font-size:13px;cursor:pointer">แก้ไข</button><button onClick="{{ p.remove }}" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;padding:4px 10px;border-radius:7px;font-size:13px;cursor:pointer">ลบ</button></div></div></sc-for>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ bIsDept }}" hint-placeholder-val="{{ false }}">
+<div style="overflow-y:auto;min-height:0;padding:22px 26px;display:grid;gap:16px;align-content:start">
+<div style="display:flex;align-items:flex-end;gap:16px"><div style="display:grid;gap:2px;margin-right:auto"><small style="color:#62727a;font-size:13px">ทะเบียน · หน่วยงานที่เบิกจากคลังกลางได้</small><b style="font-size:22px">ทะเบียนหน่วยเบิกในรพ.</b></div><button onClick="{{ dAddOpen }}" style="border:0;background:#0f766e;color:#fff;font-weight:600;padding:10px 16px;border-radius:9px;cursor:pointer;white-space:nowrap">+ เพิ่มหน่วยเบิก</button></div>
+<sc-if value="{{ dAdding }}" hint-placeholder-val="{{ false }}"><div style="background:#fff;border:1.5px solid #0f766e;border-radius:12px;padding:14px 16px;display:grid;grid-template-columns:120px minmax(0,1.4fr) minmax(0,1fr) auto;gap:10px;align-items:end">
+<label style="display:grid;gap:4px"><span style="font-size:12.5px;font-weight:600;color:#62727a">รหัสหน่วย</span><input value="{{ dNewCode }}" onChange="{{ dSetNewCode }}" placeholder="เช่น PCU" style="height:40px;border:1px solid #d9e1e4;border-radius:9px;padding:0 12px"></label>
+<label style="display:grid;gap:4px"><span style="font-size:12.5px;font-weight:600;color:#62727a">ชื่อหน่วยเบิก</span><input value="{{ dNewName }}" onChange="{{ dSetNewName }}" placeholder="เช่น หน่วยบริการปฐมภูมิ" style="height:40px;border:1px solid #d9e1e4;border-radius:9px;padding:0 12px"></label>
+<label style="display:grid;gap:4px"><span style="font-size:12.5px;font-weight:600;color:#62727a">กลุ่มงาน</span><select value="{{ dNewGroup }}" onChange="{{ dSetNewGroup }}" style="height:40px;border:1px solid #d9e1e4;border-radius:9px;padding:0 10px;background:#fff"><sc-for list="{{ dGroupOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.v }}</option></sc-for></select></label>
+<div style="display:flex;gap:6px"><button onClick="{{ dAddSave }}" style="height:40px;border:0;background:#0f766e;color:#fff;font-weight:600;padding:0 16px;border-radius:9px;cursor:pointer;white-space:nowrap">บันทึก</button><button onClick="{{ dAddClose }}" style="height:40px;border:1px solid #d9e1e4;background:#fff;padding:0 14px;border-radius:9px;cursor:pointer;white-space:nowrap">ยกเลิก</button></div>
+</div></sc-if>
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:12px;overflow:hidden">
+<div style="display:grid;grid-template-columns:90px minmax(0,1.4fr) minmax(0,1fr) 100px 100px 120px;gap:0 14px;padding:10px 18px;background:#f7f9fa;border-bottom:1px solid #e1e8ea;font-size:12.5px;font-weight:600;color:#62727a"><span>รหัสหน่วย</span><span>ชื่อหน่วยเบิก</span><span>กลุ่มงาน</span><span style="text-align:right">ผู้เบิกสินค้า</span><span style="text-align:right">ผู้รับสินค้า</span><span></span></div>
+<sc-for list="{{ dRows }}" as="d" hint-placeholder-count="7"><div style="display:grid;grid-template-columns:90px minmax(0,1.4fr) minmax(0,1fr) 100px 100px 120px;gap:0 14px;align-items:center;padding:11px 18px;border-bottom:1px solid #edf1f2;font-size:14.5px"><span style="font-weight:600;color:#0f766e">{{ d.code }}</span><b style="font-weight:500">{{ d.name }}</b><span style="color:#62727a">{{ d.group }}</span><span style="text-align:right;font-variant-numeric:tabular-nums">{{ d.nReq }} คน</span><span style="text-align:right;font-variant-numeric:tabular-nums">{{ d.nRec }} คน</span><div style="display:flex;gap:6px;justify-content:flex-end"><button style="border:1px solid #d9e1e4;background:#fff;padding:4px 10px;border-radius:7px;font-size:13px;cursor:pointer">แก้ไข</button><button onClick="{{ d.remove }}" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;padding:4px 10px;border-radius:7px;font-size:13px;cursor:pointer">ลบ</button></div></div></sc-for>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ bIsReq }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;min-height:0;padding:22px 26px;gap:16px">
+<div style="display:flex;align-items:flex-end;gap:16px">
+<div style="display:grid;gap:2px;margin-right:auto"><div style="display:flex;align-items:center;gap:8px;font-size:13px"><span style="background:#e3f2ef;color:#0f766e;font-weight:600;padding:2px 10px;border-radius:99px">{{ whName }}</span><a href="#2b" style="font-weight:600">เปลี่ยนคลัง</a><span style="color:#62727a">· ใบเบิกใหม่ · 26/09/2569</span></div><b style="font-size:22px">เบิกสินค้าจากคลังกลาง</b></div>
+<sc-if value="{{ bShowDropMini }}" hint-placeholder-val="{{ false }}"><button onClick="{{ bOpenDrop }}" style="display:flex;align-items:center;gap:8px;border:1px solid #d9e1e4;background:#fff;padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:500"><span style="font-size:10.5px;font-weight:700;background:#0f766e;color:#fff;padding:1px 5px;border-radius:4px">XLSX</span>นำเข้าไฟล์อื่น</button></sc-if>
+</div>
+<sc-if value="{{ bShowDrop }}" hint-placeholder-val="{{ true }}">
+<button onClick="{{ bImport }}" style="display:flex;align-items:center;gap:18px;border:2px dashed #9cc9c3;background:#f2faf8;border-radius:14px;padding:16px 20px;cursor:pointer;text-align:left" style-hover="background:#e3f2ef">
+<span style="font-size:13px;font-weight:700;background:#0f766e;color:#fff;padding:8px 10px;border-radius:7px">XLSX</span>
+<div style="display:grid;gap:2px;flex:1"><span style="font-size:16px;font-weight:600">มีรายการใน Excel อยู่แล้ว? ลากไฟล์มาวาง หรือ <span style="color:#0f766e;text-decoration:underline">เลือกไฟล์</span></span><small style="color:#62727a;font-size:13px">คอลัมน์: รหัสสินค้า · ชื่อสินค้า · จำนวน · หน่วย — รายการจะถูกเติมลงตารางด้านล่างให้ตรวจแก้ก่อนส่ง</small></div>
+<a href="#" style="font-size:13.5px;font-weight:600;white-space:nowrap">ไฟล์ต้นแบบ</a>
+</button>
+</sc-if>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px">
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;display:flex;flex-direction:column;min-height:0">
+<div style="display:grid;grid-template-columns:40px minmax(0,1fr) 84px 150px 84px 36px;gap:0 12px;padding:10px 16px;border-bottom:1px solid #e1e8ea;background:#f7f9fa;border-radius:14px 14px 0 0;font-size:12.5px;font-weight:600;color:#62727a">
+<span>#</span><span>สินค้า</span><span style="text-align:right">คงเหลือ</span><span style="text-align:right">จำนวนเบิก</span><span>หน่วย</span><span></span>
+</div>
+<div style="flex:1;overflow-y:auto">
+<sc-for list="{{ bRows }}" as="r" hint-placeholder-count="3">
+<div style="border-bottom:1px solid #edf1f2;background:{{ r.bg }};box-shadow:inset 3px 0 0 {{ r.edge }}">
+<div style="display:grid;grid-template-columns:40px minmax(0,1fr) 84px 150px 84px 36px;gap:0 12px;align-items:center;padding:8px 16px">
+<span style="font-size:13px;color:#62727a;font-variant-numeric:tabular-nums">{{ r.n }}</span>
+<div style="display:grid;min-width:0"><span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ r.nameFg }}">{{ r.name }}</span><small style="font-size:12px;color:#62727a">{{ r.meta }}</small></div>
+<span style="text-align:right;font-variant-numeric:tabular-nums;font-size:14px;color:{{ r.stockFg }}">{{ r.stock }}</span>
+<input class="cart-qty" value="{{ r.qty }}" onChange="{{ r.setQty }}" disabled="{{ r.locked }}" inputmode="numeric" style="height:36px;border:1px solid {{ r.qtyBd }};border-radius:8px;text-align:right;padding:0 10px;font-weight:600;font-variant-numeric:tabular-nums;background:#fff">
+<span style="font-size:13.5px;background:#eef2f3;border-radius:6px;padding:4px 8px;text-align:center">{{ r.unit }}</span>
+<button onClick="{{ r.remove }}" title="ลบแถว" style="width:30px;height:30px;border:0;background:none;color:#b91c1c;border-radius:6px;cursor:pointer;font-size:16px" style-hover="background:#fee2e2">×</button>
+</div>
+<sc-if value="{{ r.hasFlag }}" hint-placeholder-val="{{ false }}"><div style="padding:0 16px 9px 68px;font-size:13px;color:{{ r.flagFg }};display:flex;gap:10px;align-items:center"><span>{{ r.flag }}</span><sc-if value="{{ r.hasFix }}" hint-placeholder-val="{{ false }}"><button onClick="{{ r.fix }}" style="border:1px solid currentColor;background:#fff;color:inherit;font-size:12.5px;font-weight:600;padding:2px 10px;border-radius:99px;cursor:pointer">{{ r.fixLabel }}</button></sc-if></div></sc-if>
+</div>
+</sc-for>
+<div style="position:relative;display:grid;grid-template-columns:40px minmax(0,1fr);gap:0 12px;align-items:center;padding:10px 16px">
+<span style="font-size:18px;color:#0f766e;text-align:center">+</span>
+<input value="{{ bQ }}" onChange="{{ bSetQ }}" placeholder="พิมพ์ชื่อหรือรหัสสินค้าเพื่อเพิ่มแถว เช่น “ถุงมือ” หรือ “MED-004”" style="height:38px;border:1px dashed #9cc9c3;background:#f7fbfa;border-radius:9px;padding:0 12px">
+<sc-if value="{{ bHasSug }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:68px;right:16px;top:52px;background:#fff;border:1px solid #d9e1e4;border-radius:10px;box-shadow:0 12px 30px #0f2a2a26;z-index:3;overflow:hidden">
+<sc-for list="{{ bSug }}" as="s" hint-placeholder-count="3">
+<button onClick="{{ s.add }}" style="width:100%;display:grid;grid-template-columns:84px minmax(0,1fr) auto;gap:12px;align-items:center;text-align:left;border:0;border-bottom:1px solid #edf1f2;background:#fff;padding:9px 12px;cursor:pointer" style-hover="background:#f2faf8">
+<span style="font-size:13px;color:#62727a">{{ s.code }}</span><span style="font-weight:500">{{ s.name }}</span><span style="font-size:13px;color:#62727a">คงเหลือ {{ s.qty }} {{ s.unit }}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</div>
+</div>
+<aside style="display:flex;flex-direction:column;gap:14px">
+<div style="background:#fff;border:1px solid #e1e8ea;border-radius:14px;padding:16px 18px;display:grid;gap:12px">
+<b style="font-size:16px">สรุปใบเบิก</b>
+<div style="display:grid;grid-template-columns:1fr auto;gap:6px;font-size:14px">
+<span style="color:#62727a">รายการทั้งหมด</span><b style="font-variant-numeric:tabular-nums">{{ bTotal }}</b>
+<span style="color:#62727a">ควรตรวจสอบ</span><b style="color:#b45309;font-variant-numeric:tabular-nums">{{ bWarn }}</b>
+<span style="color:#62727a">ต้องแก้ก่อนส่ง</span><b style="color:#b91c1c;font-variant-numeric:tabular-nums">{{ bBad }}</b>
+</div>
+<label style="display:grid;gap:4px"><span style="font-size:13px;font-weight:600">ผู้เบิก</span><input value="สมหญิง ใจดี" style="border:1px solid #d9e1e4;background:#f7f9fa;border-radius:9px;padding:9px 12px"></label>
+<label style="display:grid;gap:4px"><span style="font-size:13px;font-weight:600">หมายเหตุ <span style="font-weight:400;color:#62727a">(ไม่บังคับ)</span></span><input placeholder="เช่น ใช้สำหรับคลินิกเบาหวาน" style="border:1px solid #d9e1e4;background:#f7f9fa;border-radius:9px;padding:9px 12px"></label>
+<button disabled="{{ bBlocked }}" style="border:0;background:{{ bSubmitBg }};color:#fff;font-weight:600;font-size:15px;padding:12px;border-radius:10px;cursor:pointer">{{ bSubmitLabel }}</button>
+</div>
+<div style="font-size:13px;color:#62727a;line-height:1.6;padding:0 4px;text-wrap:pretty">จำนวนที่ขอเกินคงเหลือยังส่งได้ คลังจะพิจารณาปรับลดตอนอนุมัติ · สต็อกถูกตัดเมื่อจ่ายของแล้วเท่านั้น</div>
+</aside>
+</div>
+</div>
+</sc-if>
+</div>
+</div>
+
+</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const ITEMS = [
+  { id: 1, code: "MED-001", name: "ถุงมือยาง ไซส์ M", cat: "วัสดุการแพทย์", unit: "กล่อง", qty: 32, min: 10 },
+  { id: 2, code: "MED-002", name: "สำลีก้อน 450 กรัม", cat: "วัสดุการแพทย์", unit: "ห่อ", qty: 4, min: 10 },
+  { id: 3, code: "MED-003", name: "แอลกอฮอล์ 70% 450 มล.", cat: "วัสดุการแพทย์", unit: "ขวด", qty: 48, min: 12 },
+  { id: 4, code: "MED-004", name: "ผ้าก๊อซ 3x3 นิ้ว", cat: "วัสดุการแพทย์", unit: "ห่อ", qty: 120, min: 30 },
+  { id: 5, code: "MED-005", name: "หน้ากากอนามัย", cat: "วัสดุการแพทย์", unit: "กล่อง", qty: 6, min: 8 },
+  { id: 6, code: "MED-006", name: "กระบอกฉีดยา 3 มล.", cat: "วัสดุการแพทย์", unit: "กล่อง", qty: 25, min: 5 },
+  { id: 7, code: "OFF-001", name: "กระดาษ A4 80 แกรม", cat: "วัสดุสำนักงาน", unit: "รีม", qty: 40, min: 10 },
+  { id: 8, code: "OFF-002", name: "ปากกาลูกลื่น สีน้ำเงิน", cat: "วัสดุสำนักงาน", unit: "ด้าม", qty: 150, min: 20 },
+  { id: 9, code: "CLN-001", name: "น้ำยาล้างพื้น 3.8 ลิตร", cat: "วัสดุงานบ้าน", unit: "แกลลอน", qty: 9, min: 4 },
+  { id: 10, code: "CLN-002", name: "ถุงขยะสีแดง (ติดเชื้อ)", cat: "วัสดุงานบ้าน", unit: "แพ็ค", qty: 0, min: 5 },
+];
+const byId = (id) => ITEMS.find((i) => i.id === id);
+// rows parsed from the sample Excel file
+const IMPORT = [
+  { srcCode: "MED-001", srcName: "ถุงมือยาง M", qty: 5, srcUnit: "กล่อง", id: 1 },
+  { srcCode: "MED-003", srcName: "แอลกอฮอล์ 70%", qty: 12, srcUnit: "ขวด", id: 3 },
+  { srcCode: "OFF-001", srcName: "กระดาษ A4", qty: 10, srcUnit: "รีม", id: 7 },
+  { srcCode: "MED-002", srcName: "สำลีก้อน", qty: 10, srcUnit: "ห่อ", id: 2 },
+  { srcCode: "", srcName: "หน้ากากอนามัย", qty: 2, srcUnit: "แพ็ค", id: 5 },
+  { srcCode: "CLN-002", srcName: "ถุงขยะแดง", qty: 3, srcUnit: "แพ็ค", id: 10 },
+  { srcCode: "", srcName: "เจลล้างมือ 500 มล.", qty: 6, srcUnit: "ขวด", id: null },
+];
+const T = {
+  ok: { bg: "#fff", dot: "#15803d", fg: "#15803d", edge: "transparent" },
+  warn: { bg: "#fffbeb", dot: "#d97706", fg: "#b45309", edge: "#f59e0b" },
+  bad: { bg: "#fef2f2", dot: "#dc2626", fg: "#b91c1c", edge: "#ef4444" },
+};
+function check(src) {
+  const it = src.id ? byId(src.id) : null;
+  if (!it) return { status: "bad", note: "ไม่พบสินค้าในคลัง" };
+  const notes = [];
+  let status = "ok";
+  if (!src.srcCode) notes.push("จับคู่ด้วยชื่อ");
+  if (src.srcUnit !== it.unit) { status = "warn"; notes.push(`หน่วยในไฟล์ “${src.srcUnit}” คลังใช้ “${it.unit}”`); }
+  if (it.qty === 0) { status = "warn"; notes.push("หมดสต็อก รอคลังพิจารณา"); }
+  else if (src.qty > it.qty) { status = "warn"; notes.push(`เกินคงเหลือ (${it.qty} ${it.unit})`); }
+  return { status, note: notes.length ? notes.join(" · ") : "พร้อมนำเข้า" };
+}
+const CHECKED = IMPORT.map((s) => ({ ...s, ...check(s) }));
+const mk = (rows) => rows.map(([code, name, unit, qty, min]) => ({ code, name, unit, qty, min }));
+const W3 = [
+  { name: "คลังยา", ini: "ยา", h: 175, desc: "ยาเม็ด ยาน้ำ ยาฉีด และยาใช้ภายนอก", items: mk([
+    ["DRG-001", "พาราเซตามอล 500 มก. (1,000 เม็ด)", "กระปุก", 24, 6], ["DRG-002", "อะม็อกซีซิลลิน 500 มก.", "กล่อง", 12, 5], ["DRG-003", "น้ำเกลือ NSS 1,000 มล.", "ขวด", 80, 20],
+    ["DRG-004", "ผงเกลือแร่ ORS", "กล่อง", 30, 10], ["DRG-005", "ยาแก้ไอน้ำดำ 60 มล.", "ขวด", 6, 12], ["DRG-006", "เมทฟอร์มิน 500 มก.", "กระปุก", 18, 6]]) },
+  { name: "คลังเวชภัณฑ์มิใช่ยา", ini: "วช", h: 172, desc: "ถุงมือ สำลี ผ้าก๊อซ กระบอกฉีดยา และวัสดุการแพทย์", items: mk([
+    ["MED-001", "ถุงมือยาง ไซส์ M", "กล่อง", 32, 10], ["MED-002", "สำลีก้อน 450 กรัม", "ห่อ", 4, 10], ["MED-003", "แอลกอฮอล์ 70% 450 มล.", "ขวด", 48, 12],
+    ["MED-004", "ผ้าก๊อซ 3x3 นิ้ว", "ห่อ", 120, 30], ["MED-005", "หน้ากากอนามัย", "กล่อง", 6, 8], ["MED-006", "กระบอกฉีดยา 3 มล.", "กล่อง", 25, 5]]) },
+  { name: "คลังยาสมุนไพร", ini: "สม", h: 145, desc: "ยาสมุนไพรและผลิตภัณฑ์แพทย์แผนไทย", items: mk([
+    ["HRB-001", "ฟ้าทะลายโจร แคปซูล", "ขวด", 40, 10], ["HRB-002", "ขมิ้นชัน แคปซูล", "ขวด", 25, 10], ["HRB-003", "ยาหอมนวโกฐ", "กล่อง", 8, 5],
+    ["HRB-004", "ยาอมมะแว้ง", "ซอง", 60, 20], ["HRB-005", "ครีมไพล", "หลอด", 3, 10]]) },
+  { name: "คลังเทคนิคการแพทย์", ini: "ทน", h: 220, desc: "น้ำยาตรวจ และวัสดุห้องปฏิบัติการ", items: mk([
+    ["LAB-001", "หลอดเก็บเลือด EDTA", "กล่อง", 20, 5], ["LAB-002", "แถบตรวจน้ำตาลในเลือด", "กล่อง", 5, 8], ["LAB-003", "สไลด์แก้ว", "กล่อง", 14, 4],
+    ["LAB-004", "เข็มเจาะเลือดปลายนิ้ว", "กล่อง", 30, 10], ["LAB-005", "ชุดตรวจ ATK", "กล่อง", 0, 5]]) },
+  { name: "คลังทันตกรรม", ini: "ทต", h: 260, desc: "วัสดุและอุปกรณ์สิ้นเปลืองงานทันตกรรม", items: mk([
+    ["DEN-001", "เข็มฉีดยาชาทันตกรรม", "กล่อง", 10, 4], ["DEN-002", "ยาชาลิโดเคน คาร์ทริดจ์", "กล่อง", 8, 4], ["DEN-003", "สำลีม้วนทันตกรรม", "ห่อ", 22, 6],
+    ["DEN-004", "วัสดุอุดฟัน GIC", "ชุด", 3, 4], ["DEN-005", "ผ้ากันเปื้อนผู้ป่วย", "แพ็ค", 15, 5]]) },
+  { name: "คลังพัสดุ", ini: "พด", h: 40, desc: "วัสดุสำนักงาน วัสดุงานบ้าน และวัสดุทั่วไป", items: mk([
+    ["SUP-001", "กระดาษ A4 80 แกรม", "รีม", 40, 10], ["SUP-002", "ปากกาลูกลื่น สีน้ำเงิน", "ด้าม", 150, 20], ["SUP-003", "แฟ้มเอกสาร", "เล่ม", 35, 10],
+    ["SUP-004", "หมึกพิมพ์เลเซอร์", "ตลับ", 4, 3], ["SUP-005", "น้ำยาล้างพื้น 3.8 ลิตร", "แกลลอน", 9, 4], ["SUP-006", "ถุงขยะสีแดง (ติดเชื้อ)", "แพ็ค", 0, 5]]) },
+];
+W3.forEach((w) => { w.tint = `oklch(0.94 0.04 ${w.h})`; w.ink = `oklch(0.42 0.1 ${w.h})`; });
+const REG = {
+  dept: { src: "ทะเบียนงานผู้ป่วยนอก (OPD)", list: [["สมหญิง ใจดี", "พยาบาลวิชาชีพชำนาญการ"], ["วิภาวรรณ ศรีสุข", "หัวหน้างานผู้ป่วยนอก"], ["ประเสริฐ มั่นคง", "เจ้าพนักงานธุรการ"], ["กมลชนก แสงทอง", "ผู้ช่วยเหลือคนไข้"]] },
+  central: { src: "ทะเบียนเจ้าหน้าที่คลังกลาง", list: [["นิพนธ์ วงศ์สวัสดิ์", "เภสัชกรชำนาญการพิเศษ (หัวหน้างานบริหารเวชภัณฑ์)"], ["อรุณี พรหมมา", "เภสัชกรปฏิบัติการ"], ["สุทธิพงษ์ คำดี", "เจ้าพนักงานเภสัชกรรม"], ["มาลี บุญเรือง", "เจ้าพนักงานพัสดุ"]] },
+};
+const DEPTS = ["งานผู้ป่วยนอก (OPD)", "ห้องฉุกเฉิน (ER)", "ผู้ป่วยในชาย", "ผู้ป่วยในหญิง", "ห้องคลอด", "งานทันตกรรม", "งานชันสูตร (LAB)"];
+const POSITIONS = ["พยาบาลวิชาชีพชำนาญการ", "พยาบาลวิชาชีพปฏิบัติการ", "หัวหน้างาน", "เจ้าพนักงานธุรการ", "ผู้ช่วยเหลือคนไข้", "นักเทคนิคการแพทย์", "ทันตแพทย์", "พนักงานทั่วไป"];
+const REGB = {
+  req: [["สมหญิง ใจดี", "พยาบาลวิชาชีพชำนาญการ", 0], ["วิภาวรรณ ศรีสุข", "หัวหน้างาน", 0], ["ธนพล แก้วมณี", "พยาบาลวิชาชีพปฏิบัติการ", 1], ["จันทร์เพ็ญ ทองดี", "พยาบาลวิชาชีพชำนาญการ", 2], ["ศิริพร อินทร์แก้ว", "พยาบาลวิชาชีพชำนาญการ", 3], ["อนุชา พึ่งบุญ", "นักเทคนิคการแพทย์", 6], ["ปวีณา รักษาดี", "ทันตแพทย์", 5]],
+  rec: [["ประเสริฐ มั่นคง", "เจ้าพนักงานธุรการ", 0], ["กมลชนก แสงทอง", "ผู้ช่วยเหลือคนไข้", 0], ["สมชาย บุญมา", "พนักงานทั่วไป", 1], ["รัตนา ชัยวงศ์", "ผู้ช่วยเหลือคนไข้", 2], ["บุญเลิศ สายทอง", "พนักงานทั่วไป", 4], ["ชุติมา พรมแก้ว", "เจ้าพนักงานธุรการ", 6]],
+};
+const D_WEEKS = [[14, 2], [12, 1], [15, 3], [13, 1], [16, 2], [14, 4], [12, 1], [15, 2], [13, 3], [14, 1], [16, 2], [15, 1]];
+const D_CATS = [["คลังยา", 412, 175], ["คลังเวชภัณฑ์มิใช่ยา", 356, 172], ["คลังพัสดุ", 248, 40], ["คลังเทคนิคการแพทย์", 173, 220], ["คลังทันตกรรม", 96, 260], ["คลังยาสมุนไพร", 64, 145]];
+const D_DEPTS = [["ห้องฉุกเฉิน (ER)", 38, 9], ["ผู้ป่วยในชาย", 31, 5], ["งานผู้ป่วยนอก (OPD)", 29, 3], ["ผู้ป่วยในหญิง", 26, 3], ["ห้องคลอด", 18, 2], ["งานทันตกรรม", 14, 1]];
+const D_TOP = [["น้ำเกลือ NSS 1,000 มล.", "คลังยา", 320, "ขวด"], ["ถุงมือยาง ไซส์ M", "คลังเวชภัณฑ์มิใช่ยา", 210, "กล่อง"], ["ผ้าก๊อซ 3x3 นิ้ว", "คลังเวชภัณฑ์มิใช่ยา", 185, "ห่อ"], ["พาราเซตามอล 500 มก.", "คลังยา", 96, "กระปุก"], ["กระดาษ A4 80 แกรม", "คลังพัสดุ", 88, "รีม"]];
+const GROUPS = ["กลุ่มการพยาบาล", "กลุ่มงานบริการด้านปฐมภูมิ", "กลุ่มงานเทคนิคการแพทย์", "กลุ่มงานทันตกรรม", "กลุ่มงานบริหารทั่วไป"];
+const DEPT_REG = [["OPD", 0, "กลุ่มการพยาบาล"], ["ER", 1, "กลุ่มการพยาบาล"], ["IPD-M", 2, "กลุ่มการพยาบาล"], ["IPD-F", 3, "กลุ่มการพยาบาล"], ["LR", 4, "กลุ่มการพยาบาล"], ["DEN", 5, "กลุ่มงานทันตกรรม"], ["LAB", 6, "กลุ่มงานเทคนิคการแพทย์"]];
+const AP_ITEMS = [
+  ["DRG-003", "น้ำเกลือ NSS 1,000 มล.", "คลังยา", "ขวด", 80], ["DRG-001", "พาราเซตามอล 500 มก.", "คลังยา", "กระปุก", 24],
+  ["MED-001", "ถุงมือยาง ไซส์ M", "คลังเวชภัณฑ์มิใช่ยา", "กล่อง", 32], ["MED-002", "สำลีก้อน 450 กรัม", "คลังเวชภัณฑ์มิใช่ยา", "ห่อ", 4],
+  ["MED-003", "แอลกอฮอล์ 70% 450 มล.", "คลังเวชภัณฑ์มิใช่ยา", "ขวด", 48], ["MED-004", "ผ้าก๊อซ 3x3 นิ้ว", "คลังเวชภัณฑ์มิใช่ยา", "ห่อ", 120],
+  ["DEN-002", "ยาชาลิโดเคน คาร์ทริดจ์", "คลังทันตกรรม", "กล่อง", 8], ["DEN-003", "สำลีม้วนทันตกรรม", "คลังทันตกรรม", "ห่อ", 22], ["SUP-001", "กระดาษ A4 80 แกรม", "คลังพัสดุ", "รีม", 40],
+];
+const AP_REQS = [
+  { id: "r1", doc: "RQ69-0138", dept: "ห้องฉุกเฉิน (ER)", short: "ER", type: "emerg", by: "ธนพล แก้วมณี", lines: { "DRG-003": 20, "MED-001": 10, "MED-004": 15 } },
+  { id: "r2", doc: "RQ69-0139", dept: "งานผู้ป่วยนอก (OPD)", short: "OPD", type: "weekly", by: "สมหญิง ใจดี", lines: { "DRG-003": 10, "DRG-001": 4, "MED-001": 5, "SUP-001": 5 } },
+  { id: "r3", doc: "RQ69-0140", dept: "ผู้ป่วยในชาย", short: "IPD-M", type: "weekly", by: "จันทร์เพ็ญ ทองดี", lines: { "DRG-003": 30, "MED-004": 20, "MED-003": 6 } },
+  { id: "r4", doc: "RQ69-0141", dept: "ห้องคลอด", short: "LR", type: "emerg", by: "ศิริพร อินทร์แก้ว", lines: { "MED-001": 8, "MED-002": 6, "DRG-003": 12 } },
+  { id: "r5", doc: "RQ69-0142", dept: "งานทันตกรรม", short: "DEN", type: "weekly", by: "ปวีณา รักษาดี", lines: { "DEN-002": 4, "DEN-003": 6, "MED-001": 4 } },
+];
+const PEOPLE = [["req", "ผู้เบิก", "ผู้ส่งใบเบิก", "dept"], ["app", "ผู้อนุมัติ", "เว้นว่างได้ คลังกลางเลือกตอนอนุมัติ", "central"], ["iss", "ผู้จ่าย", "เว้นว่างได้ คลังกลางเลือกตอนจ่าย", "central"], ["rec", "ผู้รับ", "ผู้มารับของที่คลัง", "dept"]];
+
+class Component extends DCLogic {
+  state = { s3: "shop", cart3: { "DRG-003": 10, "MED-004": 5, "SUP-001": 2 }, q3: "", note3: "", co3Err: false,
+    ppl3: { req: { n: "0", p: "พยาบาลวิชาชีพชำนาญการ" }, app: { n: "", p: "" }, iss: { n: "", p: "" }, rec: { n: "", p: "" } },
+    reg3: { dept: REG.dept.list.map(([n, p]) => ({ n, p })), central: REG.central.list.map(([n, p]) => ({ n, p })) },
+    pos3: { dept: [...new Set(REG.dept.list.map((x) => x[1]))], central: [...new Set(REG.central.list.map((x) => x[1]))] },
+    add3: null, addVal3: "",
+    lUser: "", lPw: "", lShow: false, lErr: false, wh: null, aCart: { 1: 2, 8: 10 }, aQ: "", aCat: "ทั้งหมด", aModal: false, aStep: "drop", aToast: false,
+    bRows: [{ key: "m1", id: 4, qty: 5 }, { key: "m2", id: 8, qty: 10 }], bImported: false, bDrop: true, bQ: "" };
+
+  setCart(id, v) {
+    const n = Math.max(0, parseInt(v, 10) || 0);
+    this.setState((s) => { const c = { ...s.aCart }; if (n) c[id] = n; else delete c[id]; return { aCart: c }; });
+  }
+  adminVals() {
+    const s = this.state;
+    const role = s.apRole || "admin", filter = s.apFilter || "all";
+    const st = s.apSt || { r1: "approved" };
+    const apv = s.apv || {};
+    const getA = (r, code) => (apv[r.id] && apv[r.id][code] != null ? apv[r.id][code] : r.lines[code]);
+    const shown = AP_REQS.filter((r) => filter === "all" || r.type === filter);
+    const setSt = (id, v) => this.setState({ apSt: { ...st, [id]: v } });
+    const toast = (m) => { this.setState({ apToast: m }); clearTimeout(this._apt); this._apt = setTimeout(() => this.setState({ apToast: null }), 3000); };
+    const approvedAll = AP_REQS.filter((r) => st[r.id] === "approved");
+    const rows = AP_ITEMS.filter(([code]) => shown.some((r) => r.lines[code])).map(([code, name, wh, unit, stock]) => {
+      const tot = AP_REQS.reduce((a, r) => a + (r.lines[code] ? getA(r, code) : 0), 0);
+      const totReq = AP_REQS.reduce((a, r) => a + (r.lines[code] || 0), 0);
+      const over = tot > stock;
+      return { name, wh, unit, stock, tot, totReq, over, overBy: tot - stock, totFg: over ? "#b91c1c" : "#1b2629", stockFg: over ? "#b91c1c" : "#1b2629", stockW: over ? 700 : 400, bg: over ? "#fef2f2" : "#fff",
+        cells: shown.map((r) => { const has = !!r.lines[code]; const locked = st[r.id] === "approved"; const val = has ? getA(r, code) : 0; const changed = has && val !== r.lines[code];
+          return { has, none: !has, req: r.lines[code], val, locked, bg: locked ? "#f5f8ff" : "transparent", inBg: locked ? "#eef3ff" : "#fff", bd: changed ? "#d97706" : locked ? "#c7d6fb" : "#d9e1e4", fg: changed ? "#b45309" : "#1b2629",
+            set: (e) => { const n = Math.max(0, parseInt(e.target.value, 10) || 0); this.setState((x) => { const a = { ...(x.apv || {}) }; a[r.id] = { ...(a[r.id] || {}), [code]: n }; return { apv: a }; }); } }; }) };
+    });
+    const overCount = rows.filter((r) => r.over).length;
+    const pendingShown = shown.filter((r) => st[r.id] !== "approved");
+    const appr = REG.central.list[+(s.apApprover || 0)];
+    const pdfCodes = AP_ITEMS.filter(([code]) => approvedAll.some((r) => r.lines[code]));
+    const T2 = { emerg: ["ฉุกเฉิน", "#fee2e2", "#b91c1c"], weekly: ["ตามรอบ", "#e3f2ef", "#0f766e"] };
+    return {
+      apRoles: [["admin", "ผู้ดูแลคลังกลาง"], ["dept", "เจ้าหน้าที่หน่วยงาน"]].map(([k, label]) => ({ label, pick: () => this.setState({ apRole: k, apPdf: false }), bg: role === k ? "#1b2629" : "#fff", fg: role === k ? "#fff" : "#1b2629", bd: role === k ? "#1b2629" : "#d9e1e4" })),
+      apLocked: role !== "admin", apOpen: role === "admin",
+      apUser: role === "admin" ? appr[0] : "สมหญิง ใจดี", apUserRole: role === "admin" ? "ผู้ดูแลคลังกลาง (Admin)" : "งานผู้ป่วยนอก (OPD)",
+      apFilters: [["all", "ทั้งหมด"], ["emerg", "ฉุกเฉิน"], ["weekly", "ตามรอบปกติ"]].map(([k, label]) => ({ label, pick: () => this.setState({ apFilter: k }), bg: filter === k ? "#0f766e" : "#fff", fg: filter === k ? "#fff" : "#1b2629", bd: filter === k ? "#0f766e" : "#d9e1e4" })),
+      apPending: AP_REQS.length - approvedAll.length, apApprovedCount: approvedAll.length, apNoApproved: !approvedAll.length,
+      apPdfBd: approvedAll.length ? "#0f766e" : "#d9e1e4", apPdfFg: approvedAll.length ? "#0f766e" : "#9fb5b2",
+      apCols: `200px repeat(${shown.length}, minmax(90px,1fr)) 84px 76px`,
+      apHeads: shown.map((r) => { const done = st[r.id] === "approved"; const [tl, tb, tf] = T2[r.type];
+        return { dept: r.dept, doc: r.doc, by: r.by.split(" ")[0], typeLabel: tl, typeBg: tb, typeFg: tf, pending: !done, done,
+          stLabel: done ? "อนุมัติแล้ว รอจ่าย" : "รออนุมัติ", stBg: done ? "#dbeafe" : "#fef3c7", stFg: done ? "#1d4ed8" : "#b45309", bg: done ? "#f5f8ff" : "transparent",
+          approve: () => { setSt(r.id, "approved"); toast(`อนุมัติ ${r.doc} (${r.dept}) แล้ว`); }, undo: () => setSt(r.id, "pending") }; }),
+      apRows: rows, apHasOver: overCount > 0, apOverCount: overCount, apPendingShown: pendingShown.length,
+      apBlockAll: !pendingShown.length || overCount > 0, apAllBg: !pendingShown.length || overCount > 0 ? "#9fb5b2" : "#0f766e",
+      apApproveAll: () => { const n = { ...st }; pendingShown.forEach((r) => (n[r.id] = "approved")); this.setState({ apSt: n }); toast(`อนุมัติ ${pendingShown.length} ใบเบิกแล้ว`); },
+      apApprover: s.apApprover || "0", apSetApprover: (e) => this.setState({ apApprover: e.target.value }),
+      apApproverOpts: REG.central.list.map(([n, p], v) => ({ v: String(v), label: `${n} · ${p.split(" (")[0]}` })),
+      apApproverName: appr[0], apApproverPos: appr[1],
+      apPdf: !!s.apPdf, apOpenPdf: () => approvedAll.length && this.setState({ apPdf: true }), apClosePdf: () => this.setState({ apPdf: false }),
+      apDownload: () => { this.setState({ apPdf: false }); toast("ดาวน์โหลด สรุปอนุมัติเบิก_26-09-2569.pdf แล้ว"); },
+      apPdfDocs: approvedAll.map((r) => r.doc).join(", "),
+      apPdfCols: `34px minmax(0,1fr) 46px repeat(${approvedAll.length}, 44px) 44px`,
+      apPdfHeads: approvedAll.map((r) => ({ short: r.short, dept: r.dept, doc: r.doc, by: r.by, typeLabel: T2[r.type][0] })),
+      apPdfRows: pdfCodes.map(([code, name, , unit], i) => { const vals = approvedAll.map((r) => ({ q: r.lines[code] ? getA(r, code) : "–" }));
+        return { n: i + 1, name, unit, vals, tot: approvedAll.reduce((a, r) => a + (r.lines[code] ? getA(r, code) : 0), 0) }; }),
+      apToast: !!s.apToast, apToastMsg: s.apToast || "",
+    };
+  }
+  setRow(key, patch) { this.setState((s) => ({ bRows: s.bRows.map((r) => (r.key === key ? { ...r, ...patch } : r)) })); }
+
+  renderVals() {
+    const s = this.state;
+    const cats = ["ทั้งหมด", "วัสดุการแพทย์", "วัสดุสำนักงาน", "วัสดุงานบ้าน"];
+    const q = s.aQ.trim().toLowerCase();
+    const aRows = ITEMS.filter((i) => (s.aCat === "ทั้งหมด" || i.cat === s.aCat) && (!q || (i.name + i.code).toLowerCase().includes(q))).map((i) => {
+      const qty = s.aCart[i.id] || 0;
+      const low = i.qty <= i.min;
+      return { ...i, qty: qty || "", bg: qty ? "#f2faf8" : "#fff", bd: qty ? "#0f766e" : "#d9e1e4",
+        stockLabel: i.qty === 0 ? "หมด" : i.qty.toLocaleString(), stockFg: i.qty === 0 ? "#b91c1c" : low ? "#b45309" : "#1b2629", stockW: low ? 600 : 400,
+        dec: () => this.setCart(i.id, qty - 1), inc: () => this.setCart(i.id, qty + 1), setQty: (e) => this.setCart(i.id, e.target.value) };
+    });
+    const aCart = Object.entries(s.aCart).map(([id, qty]) => {
+      const i = byId(+id); const over = qty > i.qty;
+      return { name: i.name, qty, unit: i.unit, note: over ? `เกินคงเหลือ (${i.qty})` : i.code, noteFg: over ? "#b45309" : "#62727a", remove: () => this.setCart(i.id, 0) };
+    });
+    const impOk = CHECKED.filter((c) => c.status === "ok").length;
+    const impWarn = CHECKED.filter((c) => c.status === "warn").length;
+    const impBad = CHECKED.filter((c) => c.status === "bad").length;
+    const impRows = CHECKED.map((c, k) => {
+      const it = c.id ? byId(c.id) : null; const t = T[c.status];
+      return { n: k + 2, srcName: c.srcName, srcCode: c.srcCode || "ไม่มีรหัส", srcQty: c.qty, srcUnit: c.srcUnit,
+        matchName: it ? it.name : "— ไม่พบ —", matchFg: it ? "#1b2629" : "#b91c1c", matchMeta: it ? `${it.code} · คงเหลือ ${it.qty} ${it.unit}` : "จะไม่ถูกนำเข้า",
+        qtyLabel: it ? `${c.qty} ${it.unit}` : "–", note: c.note, bg: c.status === "ok" ? "#fff" : t.bg, dot: t.dot, fg: c.status === "ok" ? "#15803d" : t.fg };
+    });
+    const step1 = s.aStep === "drop";
+
+    // 1b
+    const bRows = s.bRows.map((r, k) => {
+      const it = r.id ? byId(r.id) : null;
+      let status = "ok", flag = "", fix = null, fixLabel = "";
+      if (!it) { status = "bad"; flag = `ไม่พบ “${r.srcName}” ในคลัง — ลบแถว หรือพิมพ์ค้นหาสินค้าที่ตรงกันด้านล่าง`; }
+      else {
+        const notes = [];
+        if (r.srcUnit && r.srcUnit !== it.unit) { status = "warn"; notes.push(`ในไฟล์ระบุหน่วย “${r.srcUnit}” ระบบจะเบิกเป็น “${it.unit}” — ตรวจจำนวนให้ตรง`); fix = () => this.setRow(r.key, { srcUnit: null }); fixLabel = "ยืนยันหน่วย " + it.unit; }
+        if (it.qty === 0) { status = "warn"; notes.push("หมดสต็อก — ส่งได้ คลังจะพิจารณา"); }
+        else if (r.qty > it.qty) { status = "warn"; notes.push(`เกินคงเหลือ ${it.qty} ${it.unit}`); if (!fix) { fix = () => this.setRow(r.key, { qty: it.qty }); fixLabel = "ลดเป็น " + it.qty; } }
+        flag = notes.join(" · ");
+      }
+      const t = T[status];
+      return { n: k + 1, name: it ? it.name : r.srcName, nameFg: it ? "#1b2629" : "#b91c1c",
+        meta: it ? `${it.code} · ${it.cat}${r.fromExcel ? " · จาก Excel" : ""}` : "จาก Excel · ไม่พบรหัส",
+        stock: it ? (it.qty === 0 ? "หมด" : it.qty) : "–", stockFg: it && it.qty <= it.min ? "#b45309" : "#1b2629",
+        qty: r.qty, locked: !it, qtyBd: status === "ok" ? "#d9e1e4" : t.edge, unit: it ? it.unit : r.srcUnit,
+        status, bg: status === "ok" ? "#fff" : t.bg, edge: t.edge, hasFlag: !!flag, flag, flagFg: t.fg, hasFix: !!fix, fix, fixLabel,
+        setQty: (e) => this.setRow(r.key, { qty: Math.max(0, parseInt(e.target.value, 10) || 0) }),
+        remove: () => this.setState((st) => ({ bRows: st.bRows.filter((x) => x.key !== r.key) })) };
+    });
+    const bq = s.bQ.trim().toLowerCase();
+    const bSug = bq ? ITEMS.filter((i) => (i.name + i.code).toLowerCase().includes(bq)).slice(0, 5).map((i) => ({ ...i,
+      add: () => this.setState((st) => ({ bQ: "", bRows: [...st.bRows, { key: "n" + Date.now(), id: i.id, qty: 1 }] })) })) : [];
+    const bWarn = bRows.filter((r) => r.status === "warn").length;
+    const bBad = bRows.filter((r) => r.status === "bad").length;
+
+    const WH = [
+      ["คลังยา", "ยาเม็ด ยาน้ำ ยาฉีด และยาใช้ภายนอก", 175],
+      ["คลังเวชภัณฑ์มิใช่ยา", "ถุงมือ สำลี ผ้าก๊อซ กระบอกฉีดยา และวัสดุการแพทย์", 172],
+      ["คลังยาสมุนไพร", "ยาสมุนไพรและผลิตภัณฑ์แพทย์แผนไทย", 145],
+      ["คลังเทคนิคการแพทย์", "น้ำยาตรวจ และวัสดุห้องปฏิบัติการ", 220],
+      ["คลังทันตกรรม", "วัสดุและอุปกรณ์สิ้นเปลืองงานทันตกรรม", 260],
+      ["คลังพัสดุ", "วัสดุสำนักงาน วัสดุงานบ้าน และวัสดุทั่วไป", 40],
+    ];
+    const whName = s.wh || "คลังเวชภัณฑ์มิใช่ยา";
+    const idDigits = (s.lUser || "").replace(/\D/g, "").slice(0, 13);
+    const idOk = idDigits.length === 13;
+    const ok = idOk && s.lPw === idDigits.slice(-5);
+    const fmtId = (d) => [d.slice(0, 1), d.slice(1, 5), d.slice(5, 10), d.slice(10, 12), d.slice(12, 13)].filter(Boolean).join("-");
+    // 1b side screens
+    const bScr = s.bScr || "req";
+    const regs = s.bRegs || { req: REGB.req.map(([name, pos, d]) => ({ name, pos, dept: DEPTS[d] })), rec: REGB.rec.map(([name, pos, d]) => ({ name, pos, dept: DEPTS[d] })) };
+    const regKey = bScr === "regRec" ? "rec" : "req";
+    const navItems = [["req", "เบิกสินค้า", ""], ["list", "ใบเบิกของหน่วยงาน", ""], ["regReq", "ทะเบียนผู้เบิกสินค้า", "ทะเบียน"], ["regRec", "ทะเบียนผู้รับสินค้า", ""], ["regDept", "ทะเบียนหน่วยเบิกในรพ.", ""], ["dash", "Dashboard", "รายงาน"]];
+    const maxW = Math.max(...D_WEEKS.map(([n, e]) => n + e));
+    const maxC = D_CATS[0][1], maxD = D_DEPTS[0][1];
+    const totN = D_WEEKS.reduce((a, [n]) => a + n, 0), totE = D_WEEKS.reduce((a, [, e]) => a + e, 0);
+    const aType = s.aType || null;
+    const deptList = s.bDepts || DEPT_REG.map(([code, i, group]) => ({ code, name: DEPTS[i], group }));
+    // ---- 3a
+    const setC = (code, v) => { const n = Math.max(0, parseInt(v, 10) || 0); this.setState((st) => { const c = { ...st.cart3 }; if (n) c[code] = n; else delete c[code]; return { cart3: c, co3Err: false }; }); };
+    const cur = W3.find((w) => w.name === whName) || W3[1];
+    const cnt = (w) => w.items.filter((i) => s.cart3[i.code]).length;
+    const q3 = s.q3.trim().toLowerCase();
+    const s3Rows = cur.items.filter((i) => !q3 || (i.name + i.code).toLowerCase().includes(q3)).map((i) => {
+      const qty = s.cart3[i.code] || 0;
+      return { ...i, qty, in: qty > 0, out: !qty, bg: qty ? "#f2faf8" : "#fff",
+        stockLabel: i.qty === 0 ? "หมด" : i.qty.toLocaleString(), stockFg: i.qty === 0 ? "#b91c1c" : i.qty <= i.min ? "#b45309" : "#1b2629",
+        inc: () => setC(i.code, qty + 1), dec: () => setC(i.code, qty - 1), setQty: (e) => setC(i.code, e.target.value) };
+    });
+    let n3 = 0;
+    const c3Groups = W3.filter((w) => cnt(w)).map((w) => ({ name: w.name, ini: w.ini, tint: w.tint, ink: w.ink, count: cnt(w),
+      lines: w.items.filter((i) => s.cart3[i.code]).map((i) => ({ n: ++n3, code: i.code, name: i.name, unit: i.unit, qty: s.cart3[i.code],
+        remove: () => setC(i.code, 0), setQty: (e) => setC(i.code, e.target.value) })) }));
+    const pickWh = (name) => this.setState({ wh: name, s3: "shop", q3: "" });
+    const screens = [["wh", "เลือกคลัง"], ["shop", "เลือกสินค้า"], ["co", "ใบเบิก"], ["done", "ส่งแล้ว"], ["list", "ใบเบิกของหน่วยงาน"]];
+    const sent3 = s.sent3 || "none"; // none | pending | cancelled
+    const listOn = s.s3 === "list";
+    const ST3 = { pending: ["รออนุมัติ", "#fef3c7", "#b45309"], approved: ["อนุมัติแล้ว รอจ่าย", "#dbeafe", "#1d4ed8"], issued: ["จ่ายแล้ว", "#dcfce7", "#15803d"], cancelled: ["ยกเลิก", "#eef2f3", "#62727a"] };
+    const list3Src = [
+      ...(sent3 !== "none" ? [{ doc: "RQ69-0142", date: "26/09/2569 21:19", summary: `${n3 || 3} รายการ · ${c3Groups.map((g) => g.name).join(", ") || "หลายคลัง"}`, st: sent3 }] : []),
+      { doc: "RQ69-0131", date: "20/09/2569 09:05", summary: "6 รายการ · คลังยา, คลังเวชภัณฑ์มิใช่ยา", st: "approved" },
+      { doc: "RQ69-0117", date: "12/09/2569 10:42", summary: "4 รายการ · คลังพัสดุ", st: "issued" },
+    ];
+    const ppl = s.ppl3 || { req: { n: "0", p: "พยาบาลวิชาชีพชำนาญการ" }, app: { n: "", p: "" }, iss: { n: "", p: "" }, rec: { n: "", p: "" } };
+    const reg3 = s.reg3 || { dept: REG.dept.list.map(([n, p]) => ({ n, p })), central: REG.central.list.map(([n, p]) => ({ n, p })) };
+    const pos3 = s.pos3 || { dept: [...new Set(REG.dept.list.map((x) => x[1]))], central: [...new Set(REG.central.list.map((x) => x[1]))] };
+    const regOf = (k) => PEOPLE.find((x) => x[0] === k)[3];
+    const setPer = (k, patch) => this.setState((st) => ({ ppl3: { ...ppl, ...st.ppl3, [k]: { ...(st.ppl3 || ppl)[k], ...patch } }, co3Err: false }));
+    const reqMissing = ppl.req.n === "";
+    const saveAdd3 = () => {
+      const a = s.add3; const v = (s.addVal3 || "").trim(); if (!a || !v) return;
+      const r = regOf(a.k);
+      if (a.f === "n") {
+        const list = [...reg3[r], { n: v, p: ppl[a.k].p }];
+        this.setState({ reg3: { ...reg3, [r]: list }, add3: null, addVal3: "" }); setPer(a.k, { n: String(list.length - 1) });
+      } else {
+        this.setState({ pos3: { ...pos3, [r]: pos3[r].includes(v) ? pos3[r] : [...pos3[r], v] }, add3: null, addVal3: "" }); setPer(a.k, { p: v });
+      }
+    };
+    return {
+      s3Tabs: screens.map(([k, label]) => ({ label, pick: () => this.setState({ s3: k }), bg: s.s3 === k ? "#1b2629" : "#fff", fg: s.s3 === k ? "#fff" : "#1b2629", bd: s.s3 === k ? "#1b2629" : "#d9e1e4" })),
+      is3Wh: s.s3 === "wh", is3Shop: s.s3 === "shop", is3Co: s.s3 === "co", is3Done: s.s3 === "done",
+      go3Wh: () => this.setState({ s3: "wh" }), go3Shop: () => this.setState({ s3: "shop" }), go3Co: () => this.setState({ s3: "co" }),
+      c3Count: n3, c3WhCount: c3Groups.length, c3Has: n3 > 0, c3Empty: n3 === 0, c3BtnBg: n3 ? "#0f766e" : "#9fb5b2", c3Groups,
+      w3Cards: W3.map((w) => ({ name: w.name, desc: w.desc, ini: w.ini, tint: w.tint, ink: w.ink, count: cnt(w), hasCount: cnt(w) > 0, pick: () => pickWh(w.name) })),
+      w3Tabs: W3.map((w) => { const a = w.name === cur.name; return { name: w.name, count: cnt(w), hasCount: cnt(w) > 0, pick: () => pickWh(w.name), line: a ? "#0f766e" : "transparent", fg: a ? "#0f766e" : "#62727a", w: a ? 600 : 400 }; }),
+      w3Name: cur.name, w3Desc: cur.desc, s3Rows, q3: s.q3, setQ3: (e) => this.setState({ q3: e.target.value }),
+      people3: PEOPLE.map(([k, label, hint, reg]) => { const cur = ppl[k]; const names = reg3[reg]; const poss = [...pos3[reg]];
+        if (cur.p && !poss.includes(cur.p)) poss.push(cur.p);
+        return { label, hint, req: k === "req", src: REG[reg].src,
+          nSel: cur.n, nOpts: names.map((x, v) => ({ v: String(v), label: x.n })), nFg: cur.n !== "" ? "#1b2629" : "#62727a",
+          pSel: cur.p, pOpts: poss.map((v) => ({ v })), pFg: cur.p ? "#1b2629" : "#62727a",
+          addingN: s.add3 && s.add3.k === k && s.add3.f === "n", addingP: s.add3 && s.add3.k === k && s.add3.f === "p",
+          bd: k === "req" && s.co3Err && reqMissing ? "#b91c1c" : "#d9e1e4",
+          setN: (e) => { const v = e.target.value; if (v === "__add") return this.setState({ add3: { k, f: "n" }, addVal3: "" }); setPer(k, v === "" ? { n: "" } : { n: v, p: names[+v].p || cur.p }); },
+          setP: (e) => { const v = e.target.value; if (v === "__add") return this.setState({ add3: { k, f: "p" }, addVal3: "" }); setPer(k, { p: v }); },
+          hasCopy: k === "rec", copy: () => setPer("rec", { ...ppl.req }) }; }),
+      addVal3: s.addVal3 || "", setAddVal3: (e) => this.setState({ addVal3: e.target.value }), saveAdd3, cancelAdd3: () => this.setState({ add3: null, addVal3: "" }),
+      note3: s.note3, setNote3: (e) => this.setState({ note3: e.target.value }),
+      co3Err: s.co3Err, co3ErrMsg: !n3 ? "ยังไม่มีสินค้าในใบเบิก" : "กรุณาเลือกชื่อผู้เบิก",
+      submit3: () => { if (!n3 || reqMissing) this.setState({ co3Err: true }); else this.setState({ s3: "done", sent3: "pending", edited3: !!s.editing3, editing3: false }); },
+      reset3: () => this.setState({ cart3: {}, s3: "wh", note3: "", editing3: false, edited3: false }),
+      is3List: listOn, go3List: () => this.setState({ s3: "list", editing3: false }),
+      nav3ReqBg: listOn ? "transparent" : "#e3f2ef", nav3ReqFg: listOn ? "#62727a" : "#0f766e", nav3ListBg: listOn ? "#e3f2ef" : "transparent", nav3ListFg: listOn ? "#0f766e" : "#62727a",
+      co3Editing: !!s.editing3, co3Title: s.editing3 ? "แก้ไขใบเบิก RQ69-0142" : "ใบเบิก", co3SubmitLabel: s.editing3 ? "บันทึกการแก้ไข" : "ส่งใบเบิก",
+      done3Title: s.edited3 ? "บันทึกการแก้ไขใบเบิกแล้ว" : "ส่งใบเบิกแล้ว",
+      edit3: () => this.setState({ s3: "co", editing3: true, sent3: "pending" }), cancelEdit3: () => this.setState({ s3: "list", editing3: false }),
+      list3: list3Src.map((d) => { const [status, stBg, stFg] = ST3[d.st]; const canEdit = d.st === "pending";
+        return { ...d, status, stBg, stFg, canEdit, locked: !canEdit,
+          lockNote: d.st === "cancelled" ? "" : "แก้ไขไม่ได้ · คลังกลางอนุมัติแล้ว",
+          edit: () => this.setState({ s3: "co", editing3: true }), cancel: () => this.setState({ sent3: "cancelled" }) }; }),
+      lUser: fmtId(idDigits), lDigits: idDigits.length, lUserBd: s.lErr && !idOk ? "#b91c1c" : "#d9e1e4",
+      lPw: s.lPw, lErr: s.lErr, lPwType: s.lShow ? "text" : "password", lPwLabel: s.lShow ? "ซ่อน" : "แสดง",
+      lErrMsg: !idOk ? "กรุณากรอกเลขบัตรประชาชนให้ครบ 13 หลัก" : "รหัสผ่านไม่ถูกต้อง (ใช้เลข 5 ตัวท้ายของบัตรประชาชน)",
+      lSetUser: (e) => this.setState({ lUser: e.target.value.replace(/\D/g, "").slice(0, 13), lErr: false }), lSetPw: (e) => this.setState({ lPw: e.target.value.replace(/\D/g, "").slice(0, 5), lErr: false }),
+      aTypes: [["emerg", "เบิกฉุกเฉิน", "ต้องการใช้ด่วน", "#dc2626", "#fef2f2", "#b91c1c"], ["weekly", "เบิกตามรอบปกติ", "รอบรายสัปดาห์", "#0f766e", "#f2faf8", "#0f766e"]].map(([k, label, sub, c, bg, fg]) => {
+        const on = aType === k; const err = s.aTypeErr && !aType;
+        return { label, sub, on: String(on), tick: on ? "✓" : "", bd: on ? c : err ? "#fca5a5" : "#d9e1e4", bg: on ? bg : "#fff", box: on ? c : "#b6c3c7", boxBg: on ? c : "#fff", fg: on ? fg : "#1b2629",
+          pick: () => this.setState({ aType: on ? null : k, aTypeErr: false, aSent: false }) }; }),
+      aTypeErr: !!s.aTypeErr && !aType, aSent: !!s.aSent, aTypeName: aType === "emerg" ? "ฉุกเฉิน" : "ตามรอบ",
+      aSubmitBg: aType ? (aType === "emerg" ? "#b91c1c" : "#0f766e") : "#9fb5b2",
+      aSubmitLabel: aType === "emerg" ? `ส่งใบเบิกฉุกเฉิน (${Object.keys(s.aCart).length} รายการ)` : `ส่งใบเบิก (${Object.keys(s.aCart).length} รายการ)`,
+      aSubmit: () => (aType ? this.setState({ aSent: true }) : this.setState({ aTypeErr: true })),
+      bNav: navItems.map(([k, label, head]) => ({ label, head, hasHead: !!head, pick: () => k !== "list" && this.setState({ bScr: k, bAdding: false }),
+        bg: bScr === k ? "#1a5a55" : "transparent", fg: bScr === k ? "#fff" : "#b8d8d4", w: bScr === k ? 600 : 400 })),
+      bIsReq: bScr === "req", bIsDash: bScr === "dash", bIsReg: bScr === "regReq" || bScr === "regRec",
+      bRegTitle: regKey === "rec" ? "ทะเบียนผู้รับสินค้า" : "ทะเบียนผู้เบิกสินค้า",
+      bIsDept: bScr === "regDept",
+      dRows: deptList.map((d, i) => ({ ...d, nReq: regs.req.filter((p) => p.dept === d.name).length, nRec: regs.rec.filter((p) => p.dept === d.name).length,
+        remove: () => this.setState({ bDepts: deptList.filter((_, j) => j !== i) }) })),
+      dAdding: !!s.dAdding, dAddOpen: () => this.setState({ dAdding: true, dNewCode: "", dNewName: "", dNewGroup: GROUPS[0] }), dAddClose: () => this.setState({ dAdding: false }),
+      dNewCode: s.dNewCode || "", dNewName: s.dNewName || "", dNewGroup: s.dNewGroup || GROUPS[0], dGroupOpts: GROUPS.map((v) => ({ v })),
+      dSetNewCode: (e) => this.setState({ dNewCode: e.target.value.toUpperCase() }), dSetNewName: (e) => this.setState({ dNewName: e.target.value }), dSetNewGroup: (e) => this.setState({ dNewGroup: e.target.value }),
+      dAddSave: () => { const name = (s.dNewName || "").trim(); if (!name) return; this.setState({ dAdding: false, bDepts: [...deptList, { code: (s.dNewCode || "").trim() || "-", name, group: s.dNewGroup || GROUPS[0] }] }); },
+      ...this.adminVals(),
+      bRegRows: regs[regKey].map((p, i) => ({ ...p, n: i + 1, remove: () => this.setState({ bRegs: { ...regs, [regKey]: regs[regKey].filter((_, j) => j !== i) } }) })),
+      bAdding: !!s.bAdding, bAddOpen: () => this.setState({ bAdding: true, bNewName: "", bNewPos: POSITIONS[0], bNewDept: DEPTS[0] }), bAddClose: () => this.setState({ bAdding: false }),
+      bNewName: s.bNewName || "", bNewPos: s.bNewPos || POSITIONS[0], bNewDept: s.bNewDept || DEPTS[0],
+      bSetNewName: (e) => this.setState({ bNewName: e.target.value }), bSetNewPos: (e) => this.setState({ bNewPos: e.target.value }), bSetNewDept: (e) => this.setState({ bNewDept: e.target.value }),
+      bPosOpts: POSITIONS.map((v) => ({ v })), bDeptOpts: DEPTS.map((v) => ({ v })),
+      bAddSave: () => { const name = (s.bNewName || "").trim(); if (!name) return;
+        this.setState({ bAdding: false, bRegs: { ...regs, [regKey]: [...regs[regKey], { name, pos: s.bNewPos || POSITIONS[0], dept: s.bNewDept || DEPTS[0] }] } }); },
+      dKpis: [
+        { label: "ใบเบิกทั้งหมด", value: totN + totE, sub: "เฉลี่ย 16 ใบ/สัปดาห์", fg: "#1b2629" },
+        { label: "เบิกฉุกเฉิน", value: totE, sub: `${Math.round((totE / (totN + totE)) * 100)}% ของใบเบิกทั้งหมด`, fg: "#b91c1c" },
+        { label: "รายการที่จ่ายออก", value: D_CATS.reduce((a, c) => a + c[1], 0).toLocaleString(), sub: "จาก 6 คลัง", fg: "#1b2629" },
+        { label: "เวลาเฉลี่ยจนได้รับของ", value: "1.6 วัน", sub: "ฉุกเฉินเฉลี่ย 3 ชั่วโมง", fg: "#0f766e" },
+      ],
+      dWeeks: D_WEEKS.map(([n, e], i) => ({ label: "ส." + (i + 1), e, hN: Math.round((n / maxW) * 160), hE: Math.round((e / maxW) * 160) })),
+      dCats: D_CATS.map(([name, v, h]) => ({ name, v, pct: Math.round((v / maxC) * 100), color: `oklch(0.55 0.1 ${h})` })),
+      dDepts: D_DEPTS.map(([name, v, e]) => ({ name, v, e, pctE: (e / maxD) * 100, pctN: ((v - e) / maxD) * 100 })),
+      dTop: D_TOP.map(([name, wh, q, unit], i) => ({ n: i + 1, name, wh, q, unit })),
+      lTogglePw: () => this.setState({ lShow: !s.lShow }), lHref: ok ? "#2b" : "#2a",
+      lSubmit: (e) => { if (!ok) { e.preventDefault(); this.setState({ lErr: true }); } },
+      whName,
+      whs: WH.map(([name, desc, h]) => ({ name, desc, initial: { "คลังยา": "ยา", "คลังเวชภัณฑ์มิใช่ยา": "วช", "คลังยาสมุนไพร": "สม", "คลังเทคนิคการแพทย์": "ทน", "คลังทันตกรรม": "ทต", "คลังพัสดุ": "พด" }[name], tint: `oklch(0.94 0.04 ${h})`, ink: `oklch(0.42 0.1 ${h})`,
+        bd: name === whName ? "#0f766e" : "#e1e8ea", shadow: name === whName ? "0 0 0 3px #0f766e22" : "none", pick: () => this.setState({ wh: name, s3: "shop", q3: "" }) })),
+      aQ: s.aQ, aSetQ: (e) => this.setState({ aQ: e.target.value }),
+      aCats: cats.map((c) => ({ label: c, pick: () => this.setState({ aCat: c }), bg: c === s.aCat ? "#0f766e" : "#fff", fg: c === s.aCat ? "#fff" : "#1b2629", bd: c === s.aCat ? "#0f766e" : "#d9e1e4" })),
+      aRows, aCart, aCount: aCart.length, aEmpty: !aCart.length,
+      aModal: s.aModal, aIsDrop: step1, aIsPreview: !step1, aToast: s.aToast,
+      aStep1Bg: step1 ? "#e3f2ef" : "#f3f6f7", aStep1Fg: step1 ? "#0f766e" : "#62727a", aStep2Bg: !step1 ? "#e3f2ef" : "#f3f6f7", aStep2Fg: !step1 ? "#0f766e" : "#62727a",
+      aOpenImport: () => this.setState({ aModal: true, aStep: "drop", aToast: false }),
+      aCloseImport: () => this.setState({ aModal: false }),
+      aPickFile: () => this.setState({ aStep: "preview" }), aBackDrop: () => this.setState({ aStep: "drop" }),
+      aConfirm: () => {
+        this.setState((st) => { const c = { ...st.aCart }; CHECKED.filter((x) => x.status !== "bad").forEach((x) => { c[x.id] = (c[x.id] || 0) + x.qty; }); return { aCart: c, aModal: false, aToast: true }; });
+        clearTimeout(this._t); this._t = setTimeout(() => this.setState({ aToast: false }), 3500);
+      },
+      impRows, impOk, impWarn, impBad, impUse: impOk + impWarn,
+      bRows, bQ: s.bQ, bSetQ: (e) => this.setState({ bQ: e.target.value }), bSug, bHasSug: bSug.length > 0,
+      bShowDrop: s.bDrop, bShowDropMini: !s.bDrop, bOpenDrop: () => this.setState({ bDrop: true }),
+      bImport: () => this.setState((st) => ({ bDrop: false, bRows: [...st.bRows, ...IMPORT.map((x, k) => ({ key: "x" + k + Date.now(), id: x.id, qty: x.qty, srcUnit: x.srcUnit, srcName: x.srcName, fromExcel: true }))] })),
+      bTotal: bRows.length, bWarn, bBad, bBlocked: bBad > 0 || !bRows.length,
+      bSubmitBg: bBad > 0 || !bRows.length ? "#9fb5b2" : "#0f766e",
+      bSubmitLabel: bBad > 0 ? `แก้ ${bBad} รายการก่อนส่ง` : `ส่งใบเบิก (${bRows.length} รายการ)`,
+    };
+  }
+}
+</script>
+</body>
+</html>

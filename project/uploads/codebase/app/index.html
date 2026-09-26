@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ระบบเบิกพัสดุ รพ.ตาพระยา</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230f766e'/><path d='M8 11l8-4 8 4v10l-8 4-8-4z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/><path d='M8 11l8 4 8-4M16 15v10' fill='none' stroke='white' stroke-width='2.2'/></svg>">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .demo-banner { position: fixed; right: 12px; bottom: 12px; z-index: 30; background: #b45309; color: #fff;
+      font: 600 12px/1.4 "Segoe UI", Tahoma, sans-serif; padding: 4px 10px; border-radius: 99px; opacity: .9; }
+    @media print { .demo-banner { display: none; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">ระบบเบิกพัสดุ <small>โรงพยาบาลตาพระยา</small></div>
+    <nav id="tabs" aria-label="เมนูหลัก"></nav>
+    <div id="userbox"></div>
+  </header>
+  <main id="view" aria-live="polite"></main>
+  <dialog id="dlg"></dialog>
+  <div id="print" aria-hidden="true"></div>
+  <div id="toast" role="status" hidden></div>
+  <div class="demo-banner">โหมดตัวอย่าง — ข้อมูลไม่ถูกบันทึก</div>
+  <script src="mock-api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
