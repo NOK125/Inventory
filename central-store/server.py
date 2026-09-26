@@ -26,7 +26,7 @@ DB_PATH = Path(os.environ.get("CENTRAL_STORE_DB", BASE_DIR / "data" / "central-s
 BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", DB_PATH.parent / "backups"))
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8000"))
-# ตั้งเป็น 1 เมื่อเปิดผ่าน HTTPS (เช่นหลัง reverse proxy) คุกกี้จะถูกส่งเฉพาะทาง HTTPS
+# บังคับคุกกี้แบบ HTTPS เสมอ (ไม่จำเป็นกับ Cloudflare Tunnel เพราะระบบดูจาก X-Forwarded-Proto ให้เอง)
 COOKIE_SECURE = os.environ.get("HTTPS", "0") == "1"
 SESSION_HOURS = float(os.environ.get("SESSION_HOURS", "12"))
 MAX_FAILED_LOGINS = 5
@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS users (
     department_id INTEGER REFERENCES departments(id),
     active INTEGER NOT NULL DEFAULT 1,
     failed_logins INTEGER NOT NULL DEFAULT 0,
-    locked_until TEXT
+    locked_until TEXT,
+    must_change_password INTEGER NOT NULL DEFAULT 1   -- รหัสเริ่มต้น (5 ตัวท้าย) ต้องเปลี่ยนก่อนใช้งาน
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -160,10 +161,11 @@ class ApiError(Exception):
 class Ctx:
     """ข้อมูลของคำขอหนึ่งครั้ง: ฐานข้อมูล ผู้ใช้ที่ล็อกอิน และคุกกี้ที่จะส่งกลับ"""
 
-    def __init__(self, conn, user, token=None):
+    def __init__(self, conn, user, token=None, secure=False):
         self.conn = conn
         self.user = user
         self.token = token
+        self.secure = secure  # เปิดผ่าน HTTPS: คุกกี้ส่งเฉพาะทาง HTTPS
         self.cookie = None
         self.commit_on_error = False  # เช่น บันทึกจำนวนครั้งที่ใส่รหัสผิดแม้จะตอบ error
 
@@ -194,6 +196,10 @@ def init_db():
     try:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
+        # ฐานข้อมูลที่สร้างจากรุ่นก่อน: เพิ่มคอลัมน์ใหม่ ผู้ใช้เดิมทุกคนต้องตั้งรหัสผ่านใหม่
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
+        if "must_change_password" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 1")
         if not conn.execute("SELECT 1 FROM warehouses").fetchone():
             conn.executemany("INSERT INTO warehouses (code, name, initials, hue, description) VALUES (?, ?, ?, ?, ?)",
                              DEFAULT_WAREHOUSES)
@@ -270,9 +276,21 @@ def check_password(password, stored):
         return False
 
 
-# รหัสผ่านตามนโยบาย: เลข 5 ตัวท้ายของบัตรประชาชน
+# รหัสผ่านเริ่มต้น: เลข 5 ตัวท้ายของบัตรประชาชน ใช้ได้แค่ครั้งแรก แล้วต้องตั้งรหัสใหม่
 def default_password(username):
     return username[-5:]
+
+
+MIN_PASSWORD = 8
+
+
+def check_new_password(username, password):
+    if len(password) < MIN_PASSWORD:
+        raise ApiError(400, f"รหัสผ่านใหม่ต้องยาวอย่างน้อย {MIN_PASSWORD} ตัวอักษร")
+    if password.isdigit():
+        raise ApiError(400, "รหัสผ่านใหม่ต้องมีตัวอักษรปนอยู่ด้วย ไม่ใช่ตัวเลขล้วน")
+    if username[-5:] in password or password in username:
+        raise ApiError(400, "รหัสผ่านใหม่ต้องไม่มีเลขบัตรประชาชนอยู่ในนั้น")
 
 
 DUMMY_HASH = hash_password("00000")
@@ -293,7 +311,7 @@ def session_user(conn, token):
 def public_user(conn, u):
     d = one(conn, "SELECT name, code FROM departments WHERE id = ?", (u["department_id"],)) if u["department_id"] else None
     return {"id": u["id"], "username": u["username"], "full_name": u["full_name"], "role": u["role"],
-            "department_id": u["department_id"], "active": u["active"],
+            "department_id": u["department_id"], "active": u["active"], "must_change_password": u["must_change_password"],
             "department_name": d["name"] if d else None, "department_code": d["code"] if d else None}
 
 
@@ -301,12 +319,12 @@ def start_session(ctx, user):
     token = secrets.token_urlsafe(32)
     expires = (datetime.now() + timedelta(hours=SESSION_HOURS)).isoformat(timespec="seconds")
     ctx.conn.execute("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)", (token_hash(token), user["id"], expires))
-    ctx.cookie = session_cookie(token, int(SESSION_HOURS * 3600))
+    ctx.cookie = session_cookie(token, int(SESSION_HOURS * 3600), ctx.secure)
 
 
-def session_cookie(value, max_age):
+def session_cookie(value, max_age, secure):
     return (f"sid={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age}"
-            + ("; Secure" if COOKIE_SECURE else ""))
+            + ("; Secure" if secure else ""))
 
 
 # ---------- เข้าสู่ระบบ ----------
@@ -355,12 +373,24 @@ def login(ctx, body, query):
 def logout(ctx, body, query):
     if ctx.token:
         ctx.conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash(ctx.token),))
-    ctx.cookie = session_cookie("", 0)
+    ctx.cookie = session_cookie("", 0, ctx.secure)
     return {"ok": True}
 
 
 def get_me(ctx, body, query):
     return public_user(ctx.conn, ctx.user)
+
+
+def change_password(ctx, body, query):
+    user = ctx.user
+    if not check_password(str(body.get("old_password") or ""), user["password_hash"]):
+        raise ApiError(400, "รหัสผ่านปัจจุบันไม่ถูกต้อง")
+    new = str(body.get("new_password") or "")
+    check_new_password(user["username"], new)
+    ctx.conn.execute("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?", (hash_password(new), user["id"]))
+    # ออกจากระบบทุกเครื่องอื่น เหลือเครื่องนี้
+    ctx.conn.execute("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (user["id"], token_hash(ctx.token or "")))
+    return public_user(ctx.conn, one(ctx.conn, "SELECT * FROM users WHERE id = ?", (user["id"],)))
 
 
 # ---------- คลัง หน่วยงาน ผู้ใช้ ----------
@@ -436,7 +466,11 @@ def update_user(ctx, body, query, user_id):
     # ปลดล็อกบัญชีไปด้วยเมื่อผู้ดูแลบันทึก
     ctx.conn.execute("UPDATE users SET full_name = ?, role = ?, department_id = ?, active = ?, failed_logins = 0, locked_until = NULL WHERE id = ?",
                      (full_name, role, dept_id, active, user_id))
-    if not active:
+    if body.get("reset_password") is True:
+        target = one(ctx.conn, "SELECT username FROM users WHERE id = ?", (user_id,))
+        ctx.conn.execute("UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?",
+                         (hash_password(default_password(target["username"])), user_id))
+    if not active or body.get("reset_password") is True:
         ctx.conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
     return public_user(ctx.conn, one(ctx.conn, "SELECT * FROM users WHERE id = ?", (user_id,)))
 
@@ -873,6 +907,8 @@ def analytics(ctx, body, query):
 
 ROUTES = []
 PUBLIC = set()
+# ผู้ใช้ที่ยังใช้รหัสผ่านเริ่มต้นเรียกได้เฉพาะเส้นทางเหล่านี้ จนกว่าจะตั้งรหัสใหม่
+BEFORE_PASSWORD_CHANGE = set()
 
 
 def route(method, pattern, handler, public=False):
@@ -887,6 +923,8 @@ route("POST", "/setup", setup, public=True)
 route("POST", "/login", login, public=True)
 route("POST", "/logout", logout, public=True)
 route("GET", "/me", get_me)
+route("POST", "/me/password", change_password)
+BEFORE_PASSWORD_CHANGE.update({get_me, change_password})
 route("GET", "/warehouses", list_warehouses)
 route("GET", "/departments", list_departments)
 route("POST", "/departments", save_department)
@@ -958,10 +996,22 @@ class Handler(BaseHTTPRequestHandler):
                 return value
         return None
 
+    def via_proxy(self):
+        # เชื่อ header ของ proxy (เช่น cloudflared) เฉพาะเมื่อคำขอมาจากเครื่องนี้เอง
+        return self.client_address[0] in ("127.0.0.1", "::1")
+
+    def is_https(self):
+        return COOKIE_SECURE or (self.via_proxy() and self.headers.get("X-Forwarded-Proto", "").lower() == "https")
+
     def check_origin(self):
         # ป้องกันเว็บอื่นส่งคำสั่งแทนผู้ใช้ (CSRF) นอกเหนือจากคุกกี้ SameSite=Strict
         origin = self.headers.get("Origin")
-        if origin and urlparse(origin).netloc != self.headers.get("Host"):
+        if not origin:
+            return
+        hosts = {self.headers.get("Host")}
+        if self.via_proxy() and self.headers.get("X-Forwarded-Host"):
+            hosts.add(self.headers.get("X-Forwarded-Host"))
+        if urlparse(origin).netloc not in hosts:
             raise ApiError(403, "คำขอมาจากเว็บอื่น")
 
     def dispatch(self, method):
@@ -983,9 +1033,11 @@ class Handler(BaseHTTPRequestHandler):
                 args = [int(g) for g in match.groups()]
                 conn = connect()
                 token = self.cookie_token()
-                ctx = Ctx(conn, session_user(conn, token), token)
+                ctx = Ctx(conn, session_user(conn, token), token, self.is_https())
                 if not ctx.user and handler not in PUBLIC:
                     raise ApiError(401, "กรุณาเข้าสู่ระบบ")
+                if ctx.user and ctx.user["must_change_password"] and handler not in PUBLIC | BEFORE_PASSWORD_CHANGE:
+                    raise ApiError(403, "กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน")
                 # ล็อกฐานข้อมูลตั้งแต่ต้นสำหรับคำสั่งที่เขียนข้อมูล กันการตัดสต็อกซ้อนกัน
                 conn.execute("BEGIN IMMEDIATE" if method != "GET" else "BEGIN")
                 result = handler(ctx, body, parse_qs(url.query), *args)
@@ -1022,14 +1074,19 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(400, "ข้อมูลที่ส่งมาต้องเป็น JSON object")
         return data
 
+    def security_headers(self):
+        for k, v in SECURITY_HEADERS.items():
+            self.send_header(k, v)
+        if self.is_https():
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
+
     def send_json(self, status, payload, cookie=None):
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
-        for k, v in SECURITY_HEADERS.items():
-            self.send_header(k, v)
+        self.security_headers()
         if cookie:
             self.send_header("Set-Cookie", cookie)
         self.end_headers()
@@ -1044,8 +1101,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", STATIC_TYPES.get(target.suffix, "application/octet-stream"))
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-cache")
-        for k, v in SECURITY_HEADERS.items():
-            self.send_header(k, v)
+        self.security_headers()
         self.end_headers()
         self.wfile.write(data)
 

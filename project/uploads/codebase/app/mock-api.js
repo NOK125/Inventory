@@ -271,6 +271,8 @@
     }],
     ["POST", /^\/logout$/, () => { me = null; return { ok: true }; }],
     ["GET", /^\/me$/, () => pub(me)],
+    // โหมดตัวอย่างไม่บังคับตั้งรหัสใหม่ และไม่เก็บรหัสผ่าน
+    ["POST", /^\/me\/password$/, () => pub(me)],
     ["GET", /^\/warehouses$/, () => db.warehouses],
     ["GET", /^\/departments$/, () => db.departments.filter((d) => me.role === "admin" || d.active).map((d) => ({ ...d,
       requester_count: peopleOf("requester", d.id).length, receiver_count: peopleOf("receiver", d.id).length }))],

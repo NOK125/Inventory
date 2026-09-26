@@ -1251,7 +1251,7 @@ async function departmentsView() {
 async function usersView() {
   const [users, departments] = await Promise.all([api("GET", "/users"), api("GET", "/departments")]);
   view.innerHTML = `${pageHead("บัญชีผู้ใช้", { right: `<button type="button" class="btn primary" data-act="new">+ เพิ่มผู้ใช้</button>` })}
-    <p class="hint">เข้าสู่ระบบด้วย <b>เลขบัตรประชาชน 13 หลัก</b> รหัสผ่านคือ <b>เลข 5 ตัวท้ายของบัตร</b> · บัญชี <b>หน่วยงาน</b> เบิกสินค้าและดูได้เฉพาะใบเบิกของหน่วยงานตัวเอง บัญชี <b>ผู้ดูแลคลังกลาง</b> อนุมัติ จ่ายของ และจัดการสต็อกได้</p>
+    <p class="hint">เข้าสู่ระบบด้วย <b>เลขบัตรประชาชน 13 หลัก</b> ครั้งแรกใช้รหัสผ่าน <b>เลข 5 ตัวท้ายของบัตร</b> แล้วระบบจะบังคับให้ตั้งรหัสผ่านใหม่ · ถ้าลืมรหัสผ่าน กด "แก้ไข" แล้วเลือกรีเซ็ตรหัสผ่าน · บัญชี <b>หน่วยงาน</b> เบิกสินค้าและดูได้เฉพาะใบเบิกของหน่วยงานตัวเอง บัญชี <b>ผู้ดูแลคลังกลาง</b> อนุมัติ จ่ายของ และจัดการสต็อกได้</p>
     <div class="list">${table(["เลขบัตรประชาชน", "ชื่อ-นามสกุล", "สิทธิ์", "หน่วยงาน", "สถานะ", ""],
       users.map((u) => [`<span style="font-variant-numeric:tabular-nums">${esc(maskId(u.username))}</span>`, esc(u.full_name),
         u.role === "admin" ? badge("ผู้ดูแลคลังกลาง", "info") : "หน่วยงาน",
@@ -1262,17 +1262,19 @@ async function usersView() {
     title: u ? `แก้ไขผู้ใช้ ${u.full_name}` : "เพิ่มผู้ใช้",
     fields: [
       ...(u ? [] : [{ name: "username", label: "เลขบัตรประชาชน 13 หลัก", required: true, placeholder: "x-xxxx-xxxxx-xx-x", autocomplete: "off",
-        inputmode: "numeric", hint: "รหัสผ่านคือเลข 5 ตัวท้ายของบัตร" }]),
+        inputmode: "numeric", hint: "รหัสผ่านครั้งแรกคือเลข 5 ตัวท้ายของบัตร แล้วต้องตั้งรหัสใหม่" }]),
       { name: "full_name", label: "ชื่อ-นามสกุล", required: true },
       { name: "role", label: "สิทธิ์", type: "select", options: [["dept", "หน่วยงาน (เบิกสินค้า)"], ["admin", "ผู้ดูแลคลังกลาง"]] },
       { name: "department_id", label: "หน่วยงาน", type: "select", options: deptOptions, hint: "จำเป็นสำหรับสิทธิ์หน่วยงาน" },
-      ...(u ? [{ name: "active", label: "สถานะ", type: "select", options: [["1", "ใช้งาน"], ["0", "ปิดใช้งาน"]] }] : []),
+      ...(u ? [{ name: "active", label: "สถานะ", type: "select", options: [["1", "ใช้งาน"], ["0", "ปิดใช้งาน"]] },
+        { name: "reset_password", label: "รหัสผ่าน", type: "select", options: [["0", "ไม่เปลี่ยน"], ["1", "รีเซ็ตเป็นเลข 5 ตัวท้ายของบัตร (ผู้ใช้ต้องตั้งใหม่)"]],
+          hint: "ใช้เมื่อผู้ใช้ลืมรหัสผ่าน · การบันทึกจะปลดล็อกบัญชีที่ใส่รหัสผิดหลายครั้งด้วย" }] : []),
     ],
     values: u ? { ...u, active: String(u.active) } : { role: "dept" },
     onSubmit: async (v) => {
       if (!u) v.username = v.username.replace(/\D/g, "");
-      await api(u ? "PUT" : "POST", u ? `/users/${u.id}` : "/users", { ...v, active: v.active !== "0" });
-      toast("บันทึกแล้ว"); refresh();
+      await api(u ? "PUT" : "POST", u ? `/users/${u.id}` : "/users", { ...v, active: v.active !== "0", reset_password: v.reset_password === "1" });
+      toast(v.reset_password === "1" ? `รีเซ็ตรหัสผ่านของ ${v.full_name} แล้ว` : "บันทึกแล้ว"); refresh();
     },
   });
   bind({ new: () => form(), edit: (id) => form(users.find((u) => String(u.id) === id)) });
@@ -1338,7 +1340,7 @@ async function analyticsView() {
   bind({ go: (tab) => show(tab) });
 }
 
-// ---------- เข้าสู่ระบบ: เลขบัตรประชาชน 13 หลัก + รหัสผ่าน 5 ตัวท้าย ----------
+// ---------- เข้าสู่ระบบ: เลขบัตรประชาชน 13 หลัก + รหัสผ่าน (ครั้งแรกคือ 5 ตัวท้าย แล้วต้องตั้งใหม่) ----------
 
 function authScreen(setupMode) {
   document.body.classList.add("auth");
@@ -1362,11 +1364,11 @@ function authScreen(setupMode) {
         <label class="field"><span>เลขบัตรประจำตัวประชาชน 13 หลัก</span>
           <input class="nid" id="nid" inputmode="numeric" autocomplete="username" placeholder="x-xxxx-xxxxx-xx-x" aria-describedby="nid-count">
           <small id="nid-count">กรอกแล้ว 0/13 หลัก</small></label>
-        ${setupMode ? `<p class="hint">รหัสผ่านของบัญชีนี้คือเลข 5 ตัวท้ายของบัตรประชาชน</p>` : `<div class="field">
+        ${setupMode ? `<p class="hint">รหัสผ่านเริ่มต้นคือเลข 5 ตัวท้ายของบัตรประชาชน ระบบจะให้ตั้งรหัสผ่านใหม่ทันทีหลังสร้างบัญชี</p>` : `<div class="field">
           <span><label for="pw">รหัสผ่าน</label></span>
-          <div class="pw"><input id="pw" type="password" inputmode="numeric" maxlength="5" autocomplete="current-password" placeholder="•••••" aria-describedby="pw-hint">
+          <div class="pw"><input id="pw" type="password" autocomplete="current-password" placeholder="รหัสผ่าน" aria-describedby="pw-hint">
             <button type="button" id="pw-toggle" aria-pressed="false" aria-controls="pw">แสดง</button></div>
-          <small id="pw-hint">รหัสผ่านคือเลข 5 ตัวท้ายของบัตรประชาชน</small></div>`}
+          <small id="pw-hint">เข้าครั้งแรกใช้เลข 5 ตัวท้ายของบัตรประชาชน แล้วระบบจะให้ตั้งรหัสผ่านใหม่</small></div>`}
         <p class="form-error" role="alert" hidden></p>
         <button type="submit" class="btn primary block">${setupMode ? "สร้างบัญชีและเข้าสู่ระบบ" : "เข้าสู่ระบบ"}</button>
         <small class="center">ลืมรหัสผ่านหรือยังไม่มีบัญชี ติดต่อเจ้าหน้าที่คลังกลาง</small>
@@ -1386,7 +1388,7 @@ function authScreen(setupMode) {
     error.hidden = true;
   };
   if (pw) {
-    pw.oninput = () => { pw.value = pw.value.replace(/\D/g, "").slice(0, 5); error.hidden = true; };
+    pw.oninput = () => { error.hidden = true; };
     $("#pw-toggle").onclick = (e) => {
       const show = pw.type === "password";
       pw.type = show ? "text" : "password";
@@ -1406,14 +1408,14 @@ function authScreen(setupMode) {
     };
     if (setupMode && !fullName) return fail("กรุณาระบุชื่อ-นามสกุล", form.full_name);
     if (d.length !== 13) return fail("กรุณากรอกเลขบัตรประชาชนให้ครบ 13 หลัก", nid);
-    if (!setupMode && pw.value !== d.slice(-5)) return fail("รหัสผ่านไม่ถูกต้อง (ใช้เลข 5 ตัวท้ายของบัตรประชาชน)", pw);
+    if (!setupMode && !pw.value) return fail("กรุณากรอกรหัสผ่าน", pw);
     const submit = $("button[type=submit]", form);
     submit.disabled = true;
     try {
       me = await api("POST", setupMode ? "/setup" : "/login", setupMode
         ? { full_name: fullName, username: d, password: d.slice(-5) }
         : { username: d, password: pw.value });
-      await startApp();
+      await startApp(setupMode ? d.slice(-5) : pw.value);
     } catch (err) {
       fail(err.message);
       submit.disabled = false;
@@ -1469,22 +1471,87 @@ function refresh() {
   if (current && me) VIEWS[current][1]().catch((e) => toast(e.message, true));
 }
 
-async function startApp() {
+async function startApp(currentPassword = "") {
+  if (me.must_change_password) return passwordScreen(currentPassword);
   document.body.classList.remove("auth");
   try { warehouses = await api("GET", "/warehouses"); } catch { warehouses = []; }
   $("#userbox").innerHTML = `<b>${esc(me.full_name)}</b>
     <small>${esc(me.role === "admin" ? "ผู้ดูแลคลังกลาง (Admin)" : me.department_name || "")}</small>
+    <button type="button" id="change-pw">เปลี่ยนรหัสผ่าน</button>
     <button type="button" id="logout">ออกจากระบบ</button>`;
-  $("#logout").onclick = async () => {
-    try { await api("POST", "/logout", {}); } catch {}
-    me = null;
-    current = null;
-    resetFlow();
-    history.replaceState(null, "", location.pathname + location.search);
-    authScreen(false);
-  };
+  $("#logout").onclick = logout;
+  $("#change-pw").onclick = () => openForm({
+    title: "เปลี่ยนรหัสผ่าน",
+    fields: passwordFields(),
+    submitLabel: "บันทึกรหัสผ่านใหม่",
+    onSubmit: async (d) => { me = await savePassword(d); toast("เปลี่ยนรหัสผ่านแล้ว เครื่องอื่นที่เข้าระบบค้างไว้จะถูกออกจากระบบ"); },
+  });
   current = null;
   await show(location.hash.slice(1));
+}
+
+async function logout() {
+  try { await api("POST", "/logout", {}); } catch {}
+  me = null;
+  current = null;
+  resetFlow();
+  history.replaceState(null, "", location.pathname + location.search);
+  authScreen(false);
+}
+
+// ---------- รหัสผ่าน ----------
+
+const MIN_PASSWORD = 8;
+const passwordFields = (current = "") => [
+  { name: "old_password", label: "รหัสผ่านปัจจุบัน", type: "password", required: true, value: current, autocomplete: "current-password" },
+  { name: "new_password", label: "รหัสผ่านใหม่", type: "password", required: true, autocomplete: "new-password",
+    hint: `อย่างน้อย ${MIN_PASSWORD} ตัวอักษร มีตัวอักษรปน ห้ามมีเลขบัตรประชาชน` },
+  { name: "confirm_password", label: "ยืนยันรหัสผ่านใหม่", type: "password", required: true, autocomplete: "new-password" },
+];
+async function savePassword(d) {
+  const pw = d.new_password || "";
+  if (pw.length < MIN_PASSWORD) throw new Error(`รหัสผ่านใหม่ต้องยาวอย่างน้อย ${MIN_PASSWORD} ตัวอักษร`);
+  if (/^\d+$/.test(pw)) throw new Error("รหัสผ่านใหม่ต้องมีตัวอักษรปนอยู่ด้วย ไม่ใช่ตัวเลขล้วน");
+  if (pw !== d.confirm_password) throw new Error("ยืนยันรหัสผ่านไม่ตรงกัน");
+  return api("POST", "/me/password", { old_password: d.old_password, new_password: pw });
+}
+
+// บัญชีที่ยังใช้รหัสเริ่มต้น (5 ตัวท้ายของบัตร) ต้องตั้งรหัสใหม่ก่อนใช้งาน
+function passwordScreen(current) {
+  document.body.classList.add("auth");
+  $("#tabs").innerHTML = "";
+  $("#userbox").innerHTML = "";
+  view.onclick = view.onchange = view.oninput = view.onkeydown = null;
+  view.innerHTML = `<div class="login">
+    <div class="login-brand"><div class="logo"></div>
+      <div class="login-copy"><small>โรงพยาบาลตาพระยา</small><h1>งานบริหารเวชภัณฑ์<br>(คลังกลาง)</h1>
+        <p>เพื่อความปลอดภัยของข้อมูล กรุณาตั้งรหัสผ่านของคุณเองก่อนเริ่มใช้งาน</p></div></div>
+    <div class="login-main"><form class="login-form" id="pw-form" novalidate>
+      <div><h2>ตั้งรหัสผ่านใหม่</h2><span class="sub">${esc(me.full_name)} · รหัสผ่านเริ่มต้น (เลข 5 ตัวท้ายของบัตร) ใช้ได้แค่ครั้งแรก</span></div>
+      <div class="fields">${passwordFields(current).map((f) => fieldHtml(f)).join("")}</div>
+      <p class="form-error" role="alert" hidden></p>
+      <button type="submit" class="btn primary block">บันทึกและเริ่มใช้งาน</button>
+      <button type="button" class="link" id="pw-logout" style="justify-self:center">ออกจากระบบ</button>
+    </form></div></div>`;
+  const form = $("#pw-form");
+  const error = $(".form-error", form);
+  $(current ? "[name=new_password]" : "input", form).focus();
+  $("#pw-logout").onclick = logout;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const submit = $("button[type=submit]", form);
+    submit.disabled = true;
+    error.hidden = true;
+    try {
+      me = await savePassword(Object.fromEntries(new FormData(form)));
+      toast("ตั้งรหัสผ่านใหม่แล้ว ครั้งต่อไปให้ใช้รหัสผ่านนี้เข้าสู่ระบบ");
+      await startApp();
+    } catch (err) {
+      error.textContent = err.message;
+      error.hidden = false;
+      submit.disabled = false;
+    }
+  };
 }
 
 unauthorized = () => {
