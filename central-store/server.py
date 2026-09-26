@@ -1419,12 +1419,26 @@ def main():
         return backup()
     if "--reset-requisitions" in sys.argv:
         return reset_requisitions()
+    host = "0.0.0.0" if "--lan" in sys.argv else HOST
+    if "--log" in sys.argv:
+        # ทำงานเบื้องหลัง (Task Scheduler) ไม่มีหน้าต่าง: เก็บบันทึกลงไฟล์ ขนาดเกิน 5 MB ย้ายไปไฟล์ .old
+        log = DB_PATH.parent / "server.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        if log.exists() and log.stat().st_size > 5 * 1024 * 1024:
+            log.replace(log.with_suffix(".log.old"))
+        sys.stdout = sys.stderr = open(log, "a", encoding="utf-8", buffering=1)
+        print(f"--- เริ่มระบบ {now()} ---")
     init_db()
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    url = f"http://{'127.0.0.1' if HOST in ('0.0.0.0', '') else HOST}:{PORT}"
+    try:
+        server = ThreadingHTTPServer((host, PORT), Handler)
+    except OSError:
+        print(f"เปิดระบบไม่ได้: พอร์ต {PORT} ถูกใช้อยู่ ระบบอาจทำงานเบื้องหลังอยู่แล้ว (ตั้งเปิดอัตโนมัติไว้)")
+        print(f"ลองเปิด http://127.0.0.1:{PORT} ในเบราว์เซอร์ ถ้าเข้าได้ ไม่ต้องเปิด run.bat")
+        sys.exit(1)
+    url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '') else host}:{PORT}"
     print(f"งานบริหารเวชภัณฑ์ (คลังกลาง) กำลังทำงานที่ {url}  (กด Ctrl+C เพื่อหยุด)")
     print(f"ฐานข้อมูล: {DB_PATH}")
-    if HOST in ("0.0.0.0", ""):
+    if host in ("0.0.0.0", ""):
         print("เปิดให้เครื่องอื่นในเครือข่ายเข้าได้ที่ http://<IP ของเครื่องนี้>:" + str(PORT))
     if "--open" in sys.argv:
         webbrowser.open(url)

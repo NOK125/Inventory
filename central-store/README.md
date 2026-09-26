@@ -44,18 +44,21 @@
 3. ครั้งแรกที่รัน Windows จะถามเรื่อง Firewall ให้กด **Allow** เฉพาะ Private network
 4. ขอ IT ตั้งชื่อเว็บภายใน เช่น `http://store.tpy.local` ให้จำง่าย
 
-### ให้ระบบเปิดเองเมื่อเปิดเครื่อง (Windows)
+### ให้ระบบเปิดเองเมื่อเปิดเครื่อง (Windows) — ไม่ต้องเปิด run.bat อีก
 
-ใช้ [NSSM](https://nssm.cc/download) ติดตั้งเป็น Windows Service (เปิดเองแม้ยังไม่มีใครล็อกอินเครื่อง และเปิดใหม่ให้ถ้าหยุดทำงาน):
+1. ปิดหน้าต่าง `run.bat` ถ้าเปิดอยู่
+2. **คลิกขวา** `install-autostart.bat` → **Run as administrator** → กด Yes
+3. ต้องขึ้นข้อความสีเขียว `OK: the server is running in the background...`
 
-```bat
-nssm install CentralStore "C:\Program Files\Python312\python.exe" "C:\central-store\server.py"
-nssm set CentralStore AppDirectory C:\central-store
-nssm set CentralStore AppEnvironmentExtra HOST=0.0.0.0 PORT=8000
-nssm start CentralStore
-```
+ระบบจะทำงานเบื้องหลัง (ไม่มีหน้าต่างสีดำ) เปิดเองทุกครั้งที่เปิดเครื่อง แม้ยังไม่มีใครล็อกอิน และถ้าหยุดเองจะเปิดใหม่ภายใน 1 นาที
+บันทึกการทำงานอยู่ที่ `data/server.log` · ติดตั้งแล้ว**ไม่ต้องใช้ run.bat อีก**
 
-(เปลี่ยน path ให้ตรงกับที่ติดตั้ง Python และโฟลเดอร์ระบบ)
+| ไฟล์ (คลิกขวา → Run as administrator) | ใช้เมื่อ |
+|---|---|
+| `restart-server.bat` | หลังดาวน์โหลดระบบรุ่นใหม่ ให้ระบบใช้โค้ดใหม่ |
+| `uninstall-autostart.bat` | เลิกเปิดอัตโนมัติ กลับไปใช้ run.bat |
+
+ดูสถานะได้ที่ Task Scheduler → Task Scheduler Library → `CentralStore`
 
 ### เครื่องต้องไม่หลับ
 
@@ -154,5 +157,7 @@ winget install --id Cloudflare.cloudflared
 | `run.bat`, `backup.bat` | เปิดระบบ / สำรองข้อมูลบน Windows |
 | `tunnel-test.bat` | ลิงก์ทดลองผ่านอินเทอร์เน็ต (Cloudflare Tunnel ชั่วคราว) |
 | `reset-requisitions.bat` | ล้างใบเบิกทั้งหมดก่อนเริ่มใช้จริง (ถามยืนยันและสำรองข้อมูลก่อน) |
+| `install-autostart.bat` | ตั้งให้ระบบเปิดเองทุกครั้งที่เปิดเครื่อง (Task Scheduler) |
+| `restart-server.bat`, `uninstall-autostart.bat` | เริ่มระบบเบื้องหลังใหม่ / เลิกเปิดอัตโนมัติ |
 
 `static/app.js` และ `static/style.css` เป็นไฟล์เดียวกับตัวอย่างใน `project/uploads/codebase/app/` (ตัวอย่างนั้นใช้ข้อมูลจำลอง `mock-api.js` ไม่ต้องรันเซิร์ฟเวอร์) ถ้าแก้หน้าเว็บ ให้แก้ที่ `static/` แล้วคัดลอกไปที่ตัวอย่างด้วย
