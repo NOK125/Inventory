@@ -322,6 +322,9 @@
       return itemView(i);
     }],
     ["PUT", /^\/items\/(\d+)$/, (b, id) => { admin(); return itemView(Object.assign(item(id), itemValues(b))); }],
+    ["POST", /^\/items\/import$/, () => {
+      throw new ApiError(400, "โหมดตัวอย่างนำเข้าไฟล์ไม่ได้ ต้องรันกับ server.py (โฟลเดอร์ central-store)");
+    }],
     ["POST", /^\/items\/(\d+)\/adjust$/, (b, id) => {
       admin();
       const i = item(id);

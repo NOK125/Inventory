@@ -5,8 +5,11 @@
 รัน:      python server.py --open      แล้วเปิด http://127.0.0.1:8000
 สำรองข้อมูล: python server.py --backup
 """
+import base64
+import csv
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -15,6 +18,8 @@ import sqlite3
 import sys
 import traceback
 import webbrowser
+import xml.etree.ElementTree as ET
+import zipfile
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -32,7 +37,8 @@ SESSION_HOURS = float(os.environ.get("SESSION_HOURS", "12"))
 MAX_FAILED_LOGINS = 5
 LOCK_MINUTES = 15
 PBKDF2_ROUNDS = 200_000
-MAX_BODY = 1024 * 1024
+MAX_BODY = 12 * 1024 * 1024  # ไฟล์ Excel นำเข้าสินค้า (ส่งแบบ base64)
+MAX_IMPORT_ROWS = 5000
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS warehouses (
@@ -629,6 +635,242 @@ def adjust_item(ctx, body, query, item_id):
     return get_item(ctx.conn, item_id)
 
 
+# ---------- นำเข้าสินค้าจากไฟล์ Excel (.xlsx) หรือ CSV ----------
+# อ่านไฟล์ด้วย standard library ล้วน: .xlsx คือ zip ของไฟล์ XML
+
+XLSX_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+
+
+def cell_text(value):
+    value = str(value if value is not None else "").strip()
+    # Excel เก็บจำนวนเต็มบางครั้งเป็น 12.0
+    return value[:-2] if re.fullmatch(r"-?\d+\.0", value) else value
+
+
+def column_index(ref):
+    letters = re.match(r"[A-Z]+", ref or "")
+    if not letters:
+        return None
+    n = 0
+    for ch in letters.group():
+        n = n * 26 + ord(ch) - 64
+    return n - 1
+
+
+def read_xlsx(raw):
+    try:
+        z = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile:
+        raise ApiError(400, "เปิดไฟล์ไม่ได้ ไฟล์เสียหรือไม่ใช่ .xlsx (ถ้าเป็น .xls แบบเก่า ให้เปิดใน Excel แล้วบันทึกเป็น .xlsx)")
+    if sum(i.file_size for i in z.infolist()) > 80 * 1024 * 1024:
+        raise ApiError(400, "ไฟล์ใหญ่เกินไป")
+    names = set(z.namelist())
+    shared = []
+    if "xl/sharedStrings.xml" in names:
+        for si in ET.fromstring(z.read("xl/sharedStrings.xml")).iter(f"{{{XLSX_NS}}}si"):
+            shared.append("".join(t.text or "" for t in si.iter(f"{{{XLSX_NS}}}t")))
+    # แผ่นงานแรกตามลำดับในไฟล์
+    sheet = None
+    try:
+        first = ET.fromstring(z.read("xl/workbook.xml")).find(f"{{{XLSX_NS}}}sheets/{{{XLSX_NS}}}sheet")
+        rid = first.get(f"{{{REL_NS}}}id")
+        for rel in ET.fromstring(z.read("xl/_rels/workbook.xml.rels")).iter(f"{{{PKG_REL_NS}}}Relationship"):
+            if rel.get("Id") == rid:
+                target = rel.get("Target", "")
+                sheet = target.lstrip("/") if target.startswith("/") else "xl/" + target
+    except (KeyError, AttributeError, ET.ParseError):
+        sheet = None
+    if sheet not in names:
+        sheets = sorted(n for n in names if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", n))
+        if not sheets:
+            raise ApiError(400, "ไม่พบแผ่นงานในไฟล์ Excel")
+        sheet = sheets[0]
+    table = []
+    for row in ET.fromstring(z.read(sheet)).iter(f"{{{XLSX_NS}}}row"):
+        cells, pos = {}, 0
+        for c in row.iter(f"{{{XLSX_NS}}}c"):
+            idx = column_index(c.get("r"))
+            pos = pos if idx is None else idx
+            kind = c.get("t")
+            v = c.find(f"{{{XLSX_NS}}}v")
+            if kind == "s" and v is not None and v.text and v.text.isdigit() and int(v.text) < len(shared):
+                value = shared[int(v.text)]
+            elif kind == "inlineStr":
+                value = "".join(t.text or "" for t in c.iter(f"{{{XLSX_NS}}}t"))
+            else:
+                value = v.text if v is not None else ""
+            cells[pos] = cell_text(value)
+            pos += 1
+        table.append([cells.get(i, "") for i in range(max(cells) + 1)] if cells else [])
+        if len(table) > MAX_IMPORT_ROWS + 20:
+            raise ApiError(400, f"ไฟล์มีแถวเกิน {MAX_IMPORT_ROWS} แถว แบ่งเป็นหลายไฟล์")
+    return table
+
+
+def read_csv(raw):
+    for encoding in ("utf-8-sig", "cp874"):  # Excel บน Windows ภาษาไทยบันทึก CSV เป็น cp874
+        try:
+            text = raw.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise ApiError(400, "อ่านตัวอักษรในไฟล์ CSV ไม่ได้ ให้บันทึกเป็น CSV UTF-8 หรือ .xlsx")
+    first = text.split("\n", 1)[0]
+    delimiter = max([",", ";", "\t"], key=first.count)
+    return [[cell_text(v) for v in row] for row in csv.reader(io.StringIO(text), delimiter=delimiter)]
+
+
+IMPORT_COLUMNS = {
+    "code": ["รหัสสินค้า", "รหัส", "code", "itemcode"],
+    "name": ["ชื่อสินค้า", "ชื่อ", "รายการ", "name"],
+    "warehouse": ["คลัง", "ชื่อคลัง", "รหัสคลัง", "warehouse"],
+    "unit": ["หน่วยนับ", "หน่วย", "unit"],
+    "qty": ["คงเหลือ", "ยอดคงเหลือ", "จำนวนคงเหลือ", "จำนวน", "qty", "stock"],
+    "min_qty": ["จุดสั่งซื้อ", "ขั้นต่ำ", "min", "reorder"],
+}
+REQUIRED_COLUMNS = {"code": "รหัสสินค้า", "name": "ชื่อสินค้า", "warehouse": "คลัง", "unit": "หน่วยนับ"}
+
+
+def header_key(text):
+    t = re.sub(r"[\s*_\-()]", "", str(text)).lower()
+    for key, aliases in IMPORT_COLUMNS.items():
+        if t in [a.lower() for a in aliases]:
+            return key
+    return None
+
+
+def import_number(value, label):
+    v = str(value or "").replace(",", "").strip()
+    if not v:
+        return None
+    try:
+        n = float(v)
+    except ValueError:
+        raise ValueError(f"{label} \"{value}\" ไม่ใช่ตัวเลข")
+    if n < 0:
+        raise ValueError(f"{label}ต้องไม่ติดลบ")
+    return n
+
+
+def import_items(ctx, body, query):
+    """ตรวจไฟล์และแสดงผลก่อน (apply=false) แล้วค่อยบันทึกจริง (apply=true)"""
+    ctx.require_admin()
+    filename = str(body.get("filename") or "").lower()
+    try:
+        raw = base64.b64decode(str(body.get("data") or ""), validate=True)
+    except (ValueError, TypeError):
+        raise ApiError(400, "อ่านไฟล์ไม่ได้")
+    if not raw:
+        raise ApiError(400, "ไฟล์ว่างเปล่า")
+    if filename.endswith(".xlsx") or raw[:2] == b"PK":
+        table = read_xlsx(raw)
+    elif filename.endswith((".csv", ".txt")):
+        table = read_csv(raw)
+    elif filename.endswith(".xls"):
+        raise ApiError(400, "ไฟล์ .xls แบบเก่ายังไม่รองรับ ให้เปิดใน Excel แล้วบันทึกเป็น .xlsx")
+    else:
+        raise ApiError(400, "รองรับเฉพาะไฟล์ .xlsx หรือ .csv")
+
+    # หาแถวหัวตาราง (อยู่ใน 10 แถวแรก)
+    header_row, columns = None, {}
+    for i, row in enumerate(table[:10]):
+        found = {}
+        for j, cell in enumerate(row):
+            key = header_key(cell)
+            if key and key not in found:
+                found[key] = j
+        if len(found) >= 2:
+            header_row, columns = i, found
+            break
+    if header_row is None:
+        raise ApiError(400, "ไม่พบหัวตาราง ต้องมีคอลัมน์ " + ", ".join(REQUIRED_COLUMNS.values()))
+    missing = [label for key, label in REQUIRED_COLUMNS.items() if key not in columns]
+    if missing:
+        raise ApiError(400, "ไฟล์ไม่มีคอลัมน์: " + ", ".join(missing))
+
+    warehouses = rows(ctx.conn.execute("SELECT * FROM warehouses"))
+    def find_warehouse(text):
+        t = re.sub(r"\s", "", text)
+        for w in warehouses:
+            if t.upper() == w["code"].upper() or t in (w["name"], w["name"].replace("คลัง", "", 1)):
+                return w
+        return None
+
+    existing = {r["code"]: r for r in rows(ctx.conn.execute("SELECT * FROM items"))}
+    update_stock = body.get("update_stock") is True
+    results, seen = [], set()
+    for n, row in enumerate(table[header_row + 1:], start=header_row + 2):
+        get = lambda key: row[columns[key]].strip() if key in columns and columns[key] < len(row) else ""
+        values = {k: get(k) for k in IMPORT_COLUMNS}
+        if not any(values.values()):
+            continue
+        r = {"row": n, "code": values["code"], "name": values["name"], "warehouse": values["warehouse"], "unit": values["unit"],
+             "qty": None, "min_qty": None, "action": "error", "message": ""}
+        results.append(r)
+        if len(results) > MAX_IMPORT_ROWS:
+            raise ApiError(400, f"ไฟล์มีสินค้าเกิน {MAX_IMPORT_ROWS} รายการ แบ่งเป็นหลายไฟล์")
+        try:
+            empty = [label for key, label in REQUIRED_COLUMNS.items() if not values[key]]
+            if empty:
+                raise ValueError("ไม่ได้กรอก " + ", ".join(empty))
+            wh = find_warehouse(values["warehouse"])
+            if not wh:
+                raise ValueError(f"ไม่รู้จักคลัง \"{values['warehouse']}\"")
+            if values["code"] in seen:
+                raise ValueError("รหัสซ้ำกับแถวก่อนหน้าในไฟล์")
+            seen.add(values["code"])
+            qty = import_number(values["qty"], "คงเหลือ")
+            min_qty = import_number(values["min_qty"], "จุดสั่งซื้อ")
+        except ValueError as err:
+            r["message"] = str(err)
+            continue
+        r.update(warehouse=wh["name"], warehouse_id=wh["id"], qty=qty, min_qty=min_qty)
+        old = existing.get(values["code"])
+        if not old:
+            r["action"] = "new"
+            r["message"] = f"เพิ่มใหม่ ยอดยกมา {qty or 0:,g} {values['unit']}"
+            continue
+        changes = []
+        if old["name"] != values["name"]:
+            changes.append("ชื่อ")
+        if old["warehouse_id"] != wh["id"]:
+            changes.append("คลัง")
+        if old["unit"] != values["unit"]:
+            changes.append("หน่วยนับ")
+        if min_qty is not None and old["min_qty"] != min_qty:
+            changes.append("จุดสั่งซื้อ")
+        if update_stock and qty is not None and old["qty"] != qty:
+            changes.append(f"คงเหลือ {old['qty']:,g} → {qty:,g}")
+        r["item_id"] = old["id"]
+        r["action"] = "update" if changes else "same"
+        r["message"] = ("แก้ " + ", ".join(changes)) if changes else "มีอยู่แล้ว ข้อมูลตรงกัน"
+        if not update_stock and qty is not None and old["qty"] != qty:
+            r["message"] += f" · คงเหลือในระบบ {old['qty']:,g} (ไม่ปรับตามไฟล์)"
+
+    if body.get("apply") is True:
+        for r in results:
+            if r["action"] == "new":
+                item_id = ctx.conn.execute("INSERT INTO items (code, name, warehouse_id, unit, min_qty) VALUES (?, ?, ?, ?, ?)",
+                                           (r["code"], r["name"], r["warehouse_id"], r["unit"], r["min_qty"] or 0)).lastrowid
+                if r["qty"]:
+                    change_stock(ctx, item_id, r["qty"], "ยอดยกมา (นำเข้าจาก Excel)")
+            elif r["action"] == "update":
+                ctx.conn.execute("UPDATE items SET name = ?, warehouse_id = ?, unit = ?, min_qty = COALESCE(?, min_qty) WHERE id = ?",
+                                 (r["name"], r["warehouse_id"], r["unit"], r["min_qty"], r["item_id"]))
+                if update_stock and r["qty"] is not None:
+                    current = get_item(ctx.conn, r["item_id"])["qty"]
+                    if current != r["qty"]:
+                        change_stock(ctx, r["item_id"], r["qty"] - current, "ปรับยอดตามไฟล์นำเข้า Excel")
+    counts = {k: sum(1 for r in results if r["action"] == k) for k in ("new", "update", "same", "error")}
+    for r in results:
+        r.pop("item_id", None)
+        r.pop("warehouse_id", None)
+    return {"columns": [k for k in IMPORT_COLUMNS if k in columns], "rows": results, "counts": counts, "applied": body.get("apply") is True}
+
+
 def list_movements(ctx, body, query):
     ctx.require_admin()
     sql = """SELECT m.*, i.code, i.name, i.unit, u.full_name AS user_name, r.doc_no FROM movements m
@@ -943,6 +1185,7 @@ route("GET", "/items", list_items)
 route("POST", "/items", create_item)
 route("PUT", f"/items/{ID}", update_item)
 route("POST", f"/items/{ID}/adjust", adjust_item)
+route("POST", "/items/import", import_items)
 route("GET", "/movements", list_movements)
 route("GET", "/requisitions", list_requisitions)
 route("GET", "/requisitions/board", board)
@@ -1128,11 +1371,54 @@ def backup():
     print(f"สำรองข้อมูลแล้ว: {target}")
 
 
+def reset_requisitions():
+    """ล้างใบเบิกทั้งหมดก่อนเริ่มใช้จริง: สำรองข้อมูลก่อน แล้วคืนสต็อกที่จ่ายไป และลบใบเบิกทุกใบ
+    สินค้า หน่วยเบิก ทะเบียนรายชื่อ และบัญชีผู้ใช้ยังอยู่ครบ"""
+    init_db()
+    conn = connect()
+    try:
+        n_req = conn.execute("SELECT COUNT(*) FROM requisitions").fetchone()[0]
+        issued = conn.execute("""SELECT l.item_id, SUM(l.qty_issued) AS qty FROM lines l JOIN requisitions r ON r.id = l.requisition_id
+                                 WHERE r.status = 'issued' AND l.qty_issued > 0 GROUP BY l.item_id""").fetchall()
+    finally:
+        conn.close()
+    print(f"ใบเบิกทั้งหมด {n_req} ใบ จะถูกลบ และคืนสต็อกของที่จ่ายไปแล้ว {len(issued)} รายการสินค้า")
+    print("สินค้า หน่วยเบิก ทะเบียนรายชื่อ และบัญชีผู้ใช้ยังอยู่ครบ · เลขที่ใบเบิกจะเริ่มนับใหม่")
+    if not n_req:
+        print("ไม่มีใบเบิกให้ล้าง")
+        return
+    if input("พิมพ์ YES (ตัวพิมพ์ใหญ่) แล้วกด Enter เพื่อยืนยัน: ").strip() != "YES":
+        print("ยกเลิก ไม่มีการเปลี่ยนแปลง")
+        return
+    backup()
+    conn = connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        ts = now()
+        for item_id, qty in issued:
+            balance = conn.execute("SELECT qty FROM items WHERE id = ?", (item_id,)).fetchone()[0] + qty
+            conn.execute("UPDATE items SET qty = ? WHERE id = ?", (balance, item_id))
+            conn.execute("INSERT INTO movements (ts, item_id, delta, balance, reason) VALUES (?, ?, ?, ?, ?)",
+                         (ts, item_id, qty, balance, "คืนสต็อก: ล้างใบเบิกก่อนเริ่มใช้จริง"))
+        conn.execute("UPDATE movements SET requisition_id = NULL WHERE requisition_id IS NOT NULL")
+        conn.execute("DELETE FROM lines")
+        conn.execute("DELETE FROM requisitions")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+    print(f"ล้างใบเบิก {n_req} ใบเรียบร้อย")
+
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if "--backup" in sys.argv:
         return backup()
+    if "--reset-requisitions" in sys.argv:
+        return reset_requisitions()
     init_db()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     url = f"http://{'127.0.0.1' if HOST in ('0.0.0.0', '') else HOST}:{PORT}"

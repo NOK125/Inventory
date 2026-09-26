@@ -1049,6 +1049,7 @@ async function itemsView() {
   view.innerHTML = `${pageHead("สินค้าและสต็อก", {
       right: `<select id="wh" aria-label="กรองตามคลัง" style="width:auto">${option("", "ทุกคลัง")}${warehouses.map((w) => option(w.id, w.name)).join("")}</select>
         <input type="search" id="q" placeholder="ค้นหารหัสหรือชื่อ" aria-label="ค้นหาสินค้า" style="width:auto;min-width:200px">
+        <button type="button" class="btn outline" data-act="import"><span class="tag">XLSX</span>นำเข้าจาก Excel</button>
         <button type="button" class="btn primary" data-act="new">+ เพิ่มสินค้า</button>`,
     })}
     <datalist id="units">${units.map((u) => `<option value="${esc(u)}">`).join("")}</datalist>
@@ -1079,6 +1080,7 @@ async function itemsView() {
     { name: "min_qty", label: "จุดสั่งซื้อ", type: "number", min: 0, value: 0, hint: "คงเหลือเท่านี้หรือน้อยกว่าจะแจ้งเตือนว่าใกล้หมด" },
   ];
   bind({
+    import: () => openImport(),
     new: () => openForm({
       title: "เพิ่มสินค้า",
       fields: [...fields, { name: "initial_qty", label: "ยอดคงเหลือตอนนี้", type: "number", min: 0 }],
@@ -1119,6 +1121,137 @@ async function itemsView() {
       wireDialog(() => {});
     },
   });
+}
+
+// ---------- นำเข้าสินค้าจาก Excel (ผู้ดูแล) ----------
+// อ่านไฟล์ที่เซิร์ฟเวอร์ ตรวจก่อนแล้วค่อยบันทึก รหัสที่มีอยู่แล้วจะอัปเดตแทนการเพิ่มซ้ำ
+
+const IMPORT_ACTION = { new: ["เพิ่มใหม่", "ok"], update: ["อัปเดต", "info"], same: ["ไม่เปลี่ยน", "muted"], error: ["ไม่นำเข้า", "bad"] };
+const IMPORT_MAX_MB = 8;
+
+function downloadImportTemplate() {
+  const rows = [["รหัสสินค้า", "ชื่อสินค้า", "คลัง", "หน่วยนับ", "คงเหลือ", "จุดสั่งซื้อ"],
+    ["IT-001", "เมาส์ USB", "คลังเทคโนโลยีสารสนเทศ", "อัน", "15", "5"],
+    ["MED-001", "ถุงมือยาง ไซส์ M", "คลังเวชภัณฑ์มิใช่ยา", "กล่อง", "30", "10"]];
+  // ใส่ BOM ให้ Excel อ่านภาษาไทยถูก
+  const text = "﻿" + rows.map((r) => r.map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  a.download = "import-template.csv";
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function openImport() {
+  const st = { name: "", data: "", result: null, updateStock: false, busy: false, error: "" };
+  const send = (apply) => api("POST", "/items/import", { filename: st.name, data: st.data, update_stock: st.updateStock, apply });
+
+  const readFile = (file) => {
+    if (!file) return;
+    if (!/\.(xlsx|csv)$/i.test(file.name)) {
+      st.error = /\.xls$/i.test(file.name) ? "ไฟล์ .xls แบบเก่ายังไม่รองรับ ให้เปิดใน Excel แล้วบันทึกเป็น .xlsx" : "รองรับเฉพาะไฟล์ .xlsx หรือ .csv";
+      return render();
+    }
+    if (file.size > IMPORT_MAX_MB * 1024 * 1024) { st.error = `ไฟล์ใหญ่เกิน ${IMPORT_MAX_MB} MB`; return render(); }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      st.name = file.name;
+      st.data = String(reader.result).split(",")[1] || "";
+      await check();
+    };
+    reader.onerror = () => { st.error = "อ่านไฟล์ไม่ได้"; render(); };
+    reader.readAsDataURL(file);
+  };
+  const check = async () => {
+    st.busy = true; st.error = ""; render();
+    try { st.result = await send(false); } catch (e) { st.result = null; st.error = e.message; }
+    st.busy = false; render();
+  };
+
+  const help = () => `<div class="import-help">
+      <div class="row-between"><b>รูปแบบคอลัมน์ในไฟล์ (แถวแรกเป็นหัวตาราง)</b>
+        <button type="button" class="link" data-imp="template">ดาวน์โหลดไฟล์ต้นแบบ (.csv)</button></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>รหัสสินค้า *</th><th>ชื่อสินค้า *</th><th>คลัง *</th><th>หน่วยนับ *</th><th class="num">คงเหลือ</th><th class="num">จุดสั่งซื้อ</th></tr></thead>
+        <tbody><tr><td>IT-001</td><td>เมาส์ USB</td><td>คลังเทคโนโลยีสารสนเทศ</td><td>อัน</td><td class="num">15</td><td class="num">5</td></tr></tbody>
+      </table></div>
+      <small>คลัง: ใส่ชื่อหรือรหัสคลัง (${warehouses.map((w) => `${esc(w.name)} = ${esc(w.code)}`).join(" · ")})<br>
+        รหัสที่มีอยู่แล้วในระบบจะอัปเดตชื่อ คลัง หน่วยนับ และจุดสั่งซื้อ แทนการเพิ่มซ้ำ · สินค้าใหม่ใช้ "คงเหลือ" เป็นยอดยกมา</small>
+    </div>`;
+
+  const preview = () => {
+    const r = st.result;
+    const c = r.counts;
+    const use = c.new + c.update;
+    const shown = r.rows.slice(0, 500);
+    return `<div class="imp-file"><span class="tag">${/\.csv$/i.test(st.name) ? "CSV" : "XLSX"}</span><b>${esc(st.name)}</b>
+        <span class="muted">· ${num(r.rows.length)} รายการ</span>
+        <span class="chips">${["new", "update", "same", "error"].filter((k) => c[k]).map((k) => badge(`${IMPORT_ACTION[k][0]} ${num(c[k])}`, IMPORT_ACTION[k][1])).join("")}</span></div>
+      <label class="check"><input type="checkbox" id="imp-stock" ${st.updateStock ? "checked" : ""}>
+        <span>ปรับยอดคงเหลือของสินค้าที่มีอยู่แล้วให้ตรงกับคอลัมน์ "คงเหลือ" ในไฟล์ <small>(ใช้ตอนตรวจนับสต็อก · บันทึกในประวัติสต็อก)</small></span></label>
+      <div class="table-wrap imp-table"><table>
+        <thead><tr><th class="num">แถว</th><th>รหัส</th><th>ชื่อสินค้า</th><th>คลัง</th><th>หน่วย</th><th class="num">คงเหลือ</th><th>ผลตรวจ</th></tr></thead>
+        <tbody>${shown.map((x) => `<tr class="imp-${x.action}"><td class="num">${x.row}</td><td class="nowrap">${esc(x.code || "-")}</td><td>${esc(x.name || "-")}</td>
+          <td>${esc(x.warehouse || "-")}</td><td>${esc(x.unit || "-")}</td><td class="num">${x.qty == null ? "-" : num(x.qty)}</td>
+          <td class="msg">${badge(...IMPORT_ACTION[x.action])} ${esc(x.message)}</td></tr>`).join("")}</tbody>
+      </table></div>
+      ${r.rows.length > shown.length ? `<small>แสดง ${num(shown.length)} รายการแรก จากทั้งหมด ${num(r.rows.length)}</small>` : ""}
+      ${c.error ? `<p class="hint" style="margin:12px 0 0">แถวที่ "ไม่นำเข้า" จะถูกข้าม แก้ในไฟล์แล้วนำเข้าใหม่ได้</p>` : ""}
+      <div class="actions">
+        <button type="button" class="link" data-imp="again">เลือกไฟล์อื่น</button>
+        <button type="button" class="btn" data-imp="close">ยกเลิก</button>
+        <button type="button" class="btn primary" data-imp="apply" ${use && !st.busy ? "" : "disabled"}>${use ? `นำเข้า ${num(use)} รายการ` : "ไม่มีรายการให้นำเข้า"}</button>
+      </div>`;
+  };
+
+  function render() {
+    const onPreview = !!st.result;
+    dlg.className = "wide";
+    dlg.innerHTML = `<div class="form import">
+      <h2>นำเข้าสินค้าจาก Excel <span class="steps"><span class="${onPreview ? "" : "on"}">1 เลือกไฟล์</span><span class="${onPreview ? "on" : ""}">2 ตรวจสอบ</span></span></h2>
+      ${onPreview ? preview() : `<label class="drop" id="imp-drop">
+          <input type="file" id="imp-file" accept=".xlsx,.csv" hidden>
+          <span class="tag">XLSX</span>
+          <b>${st.busy ? "กำลังตรวจไฟล์…" : `ลากไฟล์ Excel มาวางที่นี่ หรือ <u>เลือกไฟล์</u>`}</b>
+          <small>รองรับ .xlsx และ .csv · ใช้แผ่นงานแรกของไฟล์ · ไม่เกิน 5,000 รายการ</small>
+        </label>
+        ${help()}
+        <div class="actions"><button type="button" class="btn" data-imp="close">ปิด</button></div>`}
+      <p class="form-error" role="alert" ${st.error ? "" : "hidden"}>${esc(st.error)}</p>
+    </div>`;
+    const box = $(".import", dlg);
+    box.onclick = async (e) => {
+      const b = e.target.closest("[data-imp]");
+      if (!b || b.disabled) return;
+      const act = b.dataset.imp;
+      if (act === "close") dlg.close();
+      if (act === "template") downloadImportTemplate();
+      if (act === "again") { Object.assign(st, { name: "", data: "", result: null, error: "" }); render(); }
+      if (act === "apply") {
+        b.disabled = true;
+        try {
+          const done = await send(true);
+          dlg.close();
+          toast(`นำเข้าแล้ว: เพิ่มใหม่ ${num(done.counts.new)} · อัปเดต ${num(done.counts.update)} รายการ`);
+          refresh();
+        } catch (err) { st.error = err.message; render(); }
+      }
+    };
+    const file = $("#imp-file", dlg);
+    if (file) file.onchange = () => readFile(file.files[0]);
+    const stock = $("#imp-stock", dlg);
+    if (stock) stock.onchange = () => { st.updateStock = stock.checked; check(); };
+    const drop = $("#imp-drop", dlg);
+    if (drop) {
+      drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+      drop.ondragleave = () => drop.classList.remove("over");
+      drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); readFile(e.dataTransfer.files[0]); };
+    }
+    if (!dlg.open) dlg.showModal();
+  }
+  render();
 }
 
 function movementTable(list, withItem = true) {

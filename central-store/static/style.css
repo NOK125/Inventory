@@ -409,6 +409,34 @@ input:disabled { background: var(--chip); color: var(--muted); }
 .board-foot .btn.lg { margin-left: auto; }
 .paper { background: #fff; color: #000; border: 1px solid var(--line); padding: 28px 30px; font-size: 12px; max-height: 60vh; overflow: auto; }
 
+/* ---------- นำเข้าสินค้าจาก Excel ---------- */
+.import .steps { margin-left: auto; display: flex; gap: 6px; font-size: 12.5px; font-weight: 600; }
+.import .steps span { padding: 3px 10px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+.import .steps span.on { background: var(--soft); color: var(--primary); }
+.drop { border: 2px dashed var(--soft-line); background: var(--soft-2); border-radius: 14px; padding: 40px 20px; display: grid; justify-items: center; gap: 10px; text-align: center; cursor: pointer; }
+.drop:hover, .drop.over { background: var(--soft); border-color: var(--primary); }
+.drop .tag { font-size: 13px; padding: 6px 10px; border-radius: 6px; }
+.drop b { font-size: 17px; font-weight: 600; }
+.drop u { color: var(--primary); }
+.import-help { display: grid; gap: 8px; margin-top: 16px; }
+.import-help .table-wrap { border: 1px solid var(--line); border-radius: 10px; }
+.import-help th, .import-help td { padding: 7px 10px; font-size: 13.5px; }
+.import-help td { color: var(--muted); }
+.row-between { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.imp-file { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; background: var(--head); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 14px; }
+.imp-file .chips { margin-left: auto; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin-bottom: 12px; cursor: pointer; }
+.check input { width: auto; margin-top: 4px; }
+.imp-table { max-height: 46vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.imp-table th { position: sticky; top: 0; z-index: 1; }
+.imp-table td { padding: 8px 10px; font-size: 14px; }
+.imp-table td.msg { font-size: 13px; }
+.imp-table td.nowrap { white-space: nowrap; }
+.imp-table .badge { font-size: 11.5px; padding: 1px 8px; }
+tr.imp-error td { background: var(--bad-soft); }
+tr.imp-update td { background: var(--info-soft); }
+.import .actions .link { margin-right: auto; }
+
 /* ---------- ทะเบียน ---------- */
 .inline-form {
   display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 10px; align-items: end;

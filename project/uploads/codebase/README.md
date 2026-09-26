@@ -54,6 +54,7 @@
 | `PUT /requisitions/:id` | หน่วยงานแก้ใบเบิกที่ยัง `pending` (ส่งข้อมูลชุดเดียวกับตอนสร้าง) |
 | `GET /requisitions/board` | Admin: ใบ `pending` + `approved` พร้อมบรรทัด |
 | `POST /requisitions/:id/unapprove` | Admin: `approved` → `pending` |
+| `POST /items/import` | Admin: นำเข้าสินค้าจาก .xlsx/.csv (`apply=false` ตรวจก่อน, `apply=true` บันทึก) |
 | `GET /analytics` | ข้อมูล Dashboard 12 สัปดาห์ |
 
 ถอด "เปลี่ยนรหัสผ่าน" ออก เพราะรหัสผ่านกำหนดเป็นเลข 5 ตัวท้ายของบัตร
