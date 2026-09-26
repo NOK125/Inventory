@@ -1,9 +1,10 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
-rem เปิดให้เครื่องอื่นในเครือข่ายเข้าได้ ถ้าจะใช้แค่เครื่องนี้ให้ลบบรรทัดนี้
+rem Allow other computers on the network to connect. Delete this line to allow only this computer.
 set "HOST=0.0.0.0"
-set "PY=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
-if not exist "%PY%" set "PY=python"
+set "PY=python"
+where python >NUL 2>NUL || set "PY=py"
 "%PY%" server.py --open
-pause
+echo.
+echo Server stopped. Press any key to close.
+pause >NUL
