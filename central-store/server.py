@@ -603,8 +603,14 @@ def item_values(ctx, body):
             flag(body.get("active", True)))
 
 
-def change_stock(ctx, item_id, delta, reason, requisition_id=None):
+def change_stock(ctx, item_id, delta, reason, requisition_id=None, floor_at_zero=False):
+    """floor_at_zero: การจ่ายตามใบเบิกจ่ายได้เกินคงเหลือ โดยตัดสต็อกได้แค่ถึง 0 และบันทึกส่วนที่ขาดไว้ในประวัติ
+    ส่วนการปรับลดเองยังห้ามเกินคงเหลือ"""
     item = get_item(ctx.conn, item_id)
+    if floor_at_zero and item["qty"] + delta < 0:
+        short = round(-(item["qty"] + delta), 4)
+        reason = f"{reason} · จ่าย {-delta:g} ตัดสต็อกได้ {item['qty']:g} ขาดสต็อก {short:g} {item['unit']}"
+        delta = -item["qty"]
     balance = round(item["qty"] + delta, 4)
     if balance < 0:
         raise ApiError(409, f"สต็อกไม่พอ: {item['name']} คงเหลือ {item['qty']:g} {item['unit']}")
@@ -1170,13 +1176,12 @@ def issue_requisition(ctx, body, query, req_id):
     issuer = text(body.get("issuer_name"), "ชื่อผู้จ่าย", True)
     receiver = text(body.get("receiver_name"), "ชื่อผู้รับ", True)
     qty = line_qty(doc, body.get("lines"), "qty_issued", "qty_approved")
-    short = [f"{l['name']} ต้องจ่าย {qty[l['id']]:g} คงเหลือ {l['stock']:g} {l['unit']}" for l in doc["lines"] if qty[l["id"]] > l["stock"]]
-    if short:
-        raise ApiError(409, "สต็อกไม่พอ: " + ", ".join(short))
+    # จ่ายได้ตามจำนวนที่ต้องการแม้คงเหลือในระบบไม่พอ: คงเหลือหยุดที่ 0 ไม่ติดลบ และประวัติสต็อกบันทึกส่วนที่ขาด
     for l in doc["lines"]:
         ctx.conn.execute("UPDATE lines SET qty_issued = ? WHERE id = ?", (qty[l["id"]], l["id"]))
         if qty[l["id"]]:
-            change_stock(ctx, l["item_id"], -qty[l["id"]], f"จ่ายตามใบเบิก {doc['doc_no']} ({doc['department_name']})", req_id)
+            change_stock(ctx, l["item_id"], -qty[l["id"]], f"จ่ายตามใบเบิก {doc['doc_no']} ({doc['department_name']})", req_id,
+                         floor_at_zero=True)
     ctx.conn.execute("""UPDATE requisitions SET status = 'issued', issuer_name = ?, issuer_position = ?, receiver_name = ?, receiver_position = ?,
                         issued_at = ? WHERE id = ?""", (issuer, text(body.get("issuer_position"), "ตำแหน่ง"), receiver,
                                                        text(body.get("receiver_position"), "ตำแหน่ง"), now(), req_id))

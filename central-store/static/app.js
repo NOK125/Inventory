@@ -234,7 +234,7 @@ function linesTable(doc, mode) {
   if (admin && doc.status !== "issued") headers.push(["คงเหลือในคลัง", "num"]);
   return table(headers, doc.lines.map((l, i) => {
     const approved = mode === "approve" ? input(l, "qty_approved", l.qty_requested, l.qty_requested) : num(l.qty_approved);
-    // จ่ายจริงเริ่มต้นเท่าจำนวนอนุมัติ ถ้าสต็อกไม่พอ เซิร์ฟเวอร์จะไม่ยอมจ่ายและบอกรายการที่ขาด (ไม่ลดเป็น 0 เอง)
+    // จ่ายจริงเริ่มต้นเท่าจำนวนอนุมัติ ถ้าคงเหลือไม่พอ เซิร์ฟเวอร์ตัดสต็อกได้แค่ถึง 0 และบันทึกส่วนที่ขาดในประวัติ
     const issued = mode === "issue" ? input(l, "qty_issued", l.qty_approved, l.qty_approved) : num(l.qty_issued);
     const cells = [i + 1, esc(l.warehouse_name || "-"), esc(l.code), esc(l.name), esc(l.unit), [num(l.qty_requested), "num"], [approved, "num"], [issued, "num"]];
     if (admin && doc.status !== "issued") {
@@ -316,8 +316,8 @@ async function openRequisition(id, mode = "view") {
     submit = "ยืนยันอนุมัติ";
   } else if (mode === "issue") {
     const short = doc.lines.filter((l) => l.stock < l.qty_approved);
-    if (short.length) body += `<p class="form-error">สต็อกในระบบไม่พอ ${short.length} รายการ: ${short.map((l) => `${esc(l.name)} (อนุมัติ ${num(l.qty_approved)} คงเหลือ ${num(l.stock)} ${esc(l.unit)})`).join(", ")}
-      · บันทึกรับเข้าที่หน้า สินค้า/สต็อก ก่อน หรือแก้ช่อง "จ่ายจริง" ให้ไม่เกินคงเหลือ</p>`;
+    if (short.length) body += `<p class="hint warn-note">คงเหลือในระบบไม่พอ ${short.length} รายการ: ${short.map((l) => `${esc(l.name)} (อนุมัติ ${num(l.qty_approved)} คงเหลือ ${num(l.stock)} ${esc(l.unit)})`).join(", ")}
+      · จ่ายได้ตามจำนวนที่ใส่ คงเหลือจะหยุดที่ 0 และบันทึกจำนวนที่ขาดไว้ในประวัติสต็อก</p>`;
     body += `<div class="fields step two">
       ${personSelect("issuer_name", "ผู้จ่าย", central, centralDefault(central, doc.issuer_name), "จากทะเบียนเจ้าหน้าที่คลังกลาง")}
       ${personSelect("receiver_name", "ผู้รับของ", receivers, doc.receiver_name || "", "คนที่มารับของจากคลัง · จากทะเบียนผู้รับสินค้า")}
