@@ -1775,6 +1775,9 @@ function uploadStockReport(w) {
   });
 }
 
+// เครดิตผู้พัฒนา มุมล่างซ้ายของหน้าเข้าสู่ระบบ (แถบซ้ายหลังล็อกอินอยู่ใน index.html ให้ข้อความตรงกัน)
+const CREDIT = `<div class="credit"><b>Powered by Somruthai K.</b><small>© 2026 All rights reserved · v1.0.0</small></div>`;
+
 // ---------- เข้าสู่ระบบ: เลขบัตรประชาชน 13 หลัก + รหัสผ่าน (ครั้งแรกคือ 5 ตัวท้าย แล้วต้องตั้งใหม่) ----------
 
 function authScreen(setupMode) {
@@ -1790,6 +1793,7 @@ function authScreen(setupMode) {
         <h1>งานบริหารเวชภัณฑ์<br>(คลังกลาง)</h1>
         <p>เบิกยา เวชภัณฑ์ และพัสดุจากคลังกลางให้หน่วยงาน ติดตามสถานะใบเบิกได้ในที่เดียว</p>
       </div>
+      ${CREDIT}
     </div>
     <div class="login-main">
       <form class="login-form" id="auth-form" novalidate>
@@ -1964,7 +1968,7 @@ function passwordScreen(current) {
   view.innerHTML = `<div class="login">
     <div class="login-brand"><img class="logo" src="logo.png" alt="โรงพยาบาลตาพระยา">
       <div class="login-copy"><small>โรงพยาบาลตาพระยา</small><h1>งานบริหารเวชภัณฑ์<br>(คลังกลาง)</h1>
-        <p>เพื่อความปลอดภัยของข้อมูล กรุณาตั้งรหัสผ่านของคุณเองก่อนเริ่มใช้งาน</p></div></div>
+        <p>เพื่อความปลอดภัยของข้อมูล กรุณาตั้งรหัสผ่านของคุณเองก่อนเริ่มใช้งาน</p></div>${CREDIT}</div>
     <div class="login-main"><form class="login-form" id="pw-form" novalidate>
       <div><h2>ตั้งรหัสผ่านใหม่</h2><span class="sub">${esc(me.full_name)} · รหัสผ่านเริ่มต้น (เลข 5 ตัวท้ายของบัตร) ใช้ได้แค่ครั้งแรก</span></div>
       <div class="fields">${passwordFields(current).map((f) => fieldHtml(f)).join("")}</div>
