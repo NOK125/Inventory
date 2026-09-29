@@ -74,6 +74,14 @@ small, .muted { color: var(--muted); }
 
 main { max-width: 1240px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
 
+.site-footer {
+  display: grid; gap: .15rem;
+  max-width: 1240px; margin: 0 auto; padding: 1rem 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: .85rem;
+}
+.site-footer strong { color: var(--text); }
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
