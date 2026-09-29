@@ -477,6 +477,7 @@ tr.imp-update td { background: var(--info-soft); }
 .kpi small { font-size: 12.5px; }
 .charts { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
 .charts.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.charts.single { grid-template-columns: minmax(0, 1fr); }
 .chart { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-content: start; min-width: 0; }
 .chart-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
 .chart-title b { font-size: 15px; margin-right: auto; }

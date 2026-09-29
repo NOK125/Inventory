@@ -1234,14 +1234,14 @@ def analytics(ctx, body, query):
     # สินค้าที่เปิดให้เบิกแต่ไม่มีใครเบิกเลยใน 30 วันล่าสุด (นับใบทุกสถานะยกเว้นยกเลิก/ไม่อนุมัติ)
     idle_since = (end - timedelta(days=30)).isoformat(timespec="seconds")
     idle = rows(ctx.conn.execute("""
-        SELECT i.id, i.code, i.name, i.unit, i.qty, w.name AS warehouse_name,
+        SELECT i.id, i.code, i.name, i.unit, w.name AS warehouse_name,
                (SELECT MAX(r.created_at) FROM lines l JOIN requisitions r ON r.id = l.requisition_id
                 WHERE l.item_id = i.id AND r.status NOT IN ('cancelled', 'rejected')) AS last_requested
         FROM items i JOIN warehouses w ON w.id = i.warehouse_id
         WHERE i.active = 1 AND NOT EXISTS (
             SELECT 1 FROM lines l JOIN requisitions r ON r.id = l.requisition_id
             WHERE l.item_id = i.id AND r.created_at >= ? AND r.status NOT IN ('cancelled', 'rejected'))
-        ORDER BY w.id, i.code""", (idle_since,))) if ctx.admin else []
+        ORDER BY w.id, i.code""", (idle_since,)))
 
     done = [r for r in docs if r["issued_at"]]
     return {
@@ -1365,14 +1365,13 @@ def analytics_export(ctx, body, query):
     ]
     if ctx.admin:
         waiting = summary(ctx, body, query)["waiting"]
-        sheets += [
-            ("ใบเบิกที่ต้องดำเนินการ", [["เลขที่", "วันที่ส่ง", "หน่วยงาน", "ผู้เบิก", "ประเภท", "สถานะ"]]
-             + [[r["doc_no"], th_date(r["created_at"], True), r["department_name"], r["requester_name"],
-                 REQ_TYPE_TH.get(r["req_type"], ""), STATUS[r["status"]]] for r in waiting]),
-            ("สินค้าที่ไม่มีการเบิก 30 วัน", [["รหัส", "รายการ", "คลัง", "คงเหลือ", "หน่วย", "เบิกล่าสุด"]]
-             + [[i["code"], i["name"], i["warehouse_name"], i["qty"], i["unit"],
-                 th_date(i["last_requested"]) if i["last_requested"] else "ไม่เคยเบิก"] for i in a["idle_items"]]),
-        ]
+        sheets.append(("ใบเบิกที่ต้องดำเนินการ", [["เลขที่", "วันที่ส่ง", "หน่วยงาน", "ผู้เบิก", "ประเภท", "สถานะ"]]
+                       + [[r["doc_no"], th_date(r["created_at"], True), r["department_name"], r["requester_name"],
+                           REQ_TYPE_TH.get(r["req_type"], ""), STATUS[r["status"]]] for r in waiting]))
+    # ทุกบัญชีเห็นสินค้าที่ไม่มีการเบิก (เหมือนบนหน้า Dashboard)
+    sheets.append(("สินค้าที่ไม่มีการเบิก 30 วัน", [["รหัส", "รายการ", "คลัง", "หน่วย", "เบิกล่าสุด"]]
+                   + [[i["code"], i["name"], i["warehouse_name"], i["unit"],
+                       th_date(i["last_requested"]) if i["last_requested"] else "ไม่เคยเบิก"] for i in a["idle_items"]]))
     d = datetime.now()
     return FileResult(build_xlsx(sheets), XLSX_MIME, f"Dashboard_{d:%d-%m}-{d.year + 543}.xlsx", "attachment")
 
