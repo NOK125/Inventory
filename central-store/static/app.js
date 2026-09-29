@@ -1702,6 +1702,79 @@ function addGuideline() {
   });
 }
 
+// ---------- สินค้าคงคลังรายวัน: ไฟล์ PDF ยอดคงคลังแยกตามคลัง (ทุกคนดูได้ ผู้ดูแลอัปโหลด/ลบ) ----------
+
+const STOCK_KEEP_DAYS = 14; // ตรงกับ STOCK_KEEP_DAYS ใน server.py
+const stockFileUrl = (r) => `/api/stock-reports/${r.id}/file`;
+const whenDT = (ts) => `วันที่ ${when(ts, false)} เวลา ${ts.slice(11, 16)} น.`;
+
+async function stockView() {
+  const admin = me.role === "admin";
+  const reports = await api("GET", "/stock-reports");
+  const today = nowTs().slice(0, 10);
+  const byWh = new Map(warehouses.map((w) => [w.id, reports.filter((r) => r.warehouse_id === w.id)]));
+  const latest = reports.reduce((a, r) => (!a || r.report_at > a.report_at ? r : a), null);
+  const doneToday = warehouses.filter((w) => byWh.get(w.id)[0]?.report_at.slice(0, 10) === today).length;
+
+  view.innerHTML = `${pageHead("สินค้าคงคลัง", { sub: `ยอดคงคลังรายวันของแต่ละคลัง (ไฟล์ PDF) · เก็บย้อนหลัง ${STOCK_KEEP_DAYS} วัน` })}
+    <div class="stock-status ${latest ? "" : "none"}">
+      ${latest ? `<b>สินค้าคงคลัง ณ ${whenDT(latest.report_at)}</b>` : "<b>ยังไม่มีข้อมูลสินค้าคงคลัง</b>"}
+      <span>อัปเดตวันนี้แล้ว ${doneToday} จาก ${warehouses.length} คลัง</span>
+    </div>
+    <div class="stock-grid">${warehouses.map((w) => {
+      const list = byWh.get(w.id);
+      const cur = list[0];
+      const fresh = cur && cur.report_at.slice(0, 10) === today;
+      return `<section class="panel stock-box">
+        <div class="stock-head">${whIco(w)}<b>${esc(w.name)}</b>
+          ${cur ? `<span class="badge ${fresh ? "ok" : "warn"}">${fresh ? "วันนี้" : "ยังไม่อัปเดตวันนี้"}</span>` : ""}</div>
+        ${cur ? `<div class="stock-when">ยอด ณ ${whenDT(cur.report_at)}</div>
+          <a class="btn outline block" href="${stockFileUrl(cur)}" target="_blank" rel="noopener"><span class="tag">PDF</span>เปิดยอดคงคลัง</a>
+          ${list.length > 1 ? `<select class="stock-old" aria-label="ดูยอดวันก่อนหน้า ${esc(w.name)}">
+            <option value="">ดูวันก่อนหน้า (${list.length - 1})</option>
+            ${list.slice(1).map((r) => `<option value="${r.id}">${when(r.report_at, false)} ${r.report_at.slice(11, 16)} น.</option>`).join("")}</select>` : ""}`
+          : `<p class="empty">ยังไม่มีไฟล์</p>`}
+        ${admin ? `<div class="stock-admin">
+          <button type="button" class="btn primary small" data-act="up" data-id="${w.id}">อัปโหลด PDF</button>
+          ${cur ? `<button type="button" class="btn small danger" data-act="del" data-id="${cur.id}" title="ลบไฟล์ล่าสุดของคลังนี้">ลบไฟล์ล่าสุด</button>` : ""}
+        </div>` : ""}
+      </section>`;
+    }).join("")}</div>`;
+
+  view.onchange = (e) => {
+    if (!e.target.matches(".stock-old") || !e.target.value) return;
+    window.open(stockFileUrl({ id: e.target.value }), "_blank", "noopener");
+    e.target.value = "";
+  };
+  bind({
+    up: (id) => uploadStockReport(whOf(id)),
+    del: async (id) => {
+      const r = reports.find((x) => String(x.id) === String(id));
+      if (!confirm(`ลบไฟล์ยอดคงคลัง ${whOf(r.warehouse_id)?.name} ${whenDT(r.report_at)}?`)) return;
+      try { await api("DELETE", `/stock-reports/${id}`); toast("ลบไฟล์แล้ว"); await stockView(); }
+      catch (err) { toast(err.message, true); }
+    },
+  });
+}
+
+function uploadStockReport(w) {
+  dlg.className = "";
+  dlg.innerHTML = dialogShell(`อัปโหลดยอดคงคลัง · ${esc(w.name)}`, `<div class="fields">
+      ${fieldHtml({ name: "report_at", label: "ยอดคงคลัง ณ วันที่และเวลา", type: "datetime-local", required: true, value: nowTs().slice(0, 16) })}
+      <label class="field"><span>ไฟล์ PDF *</span><input type="file" name="file" accept="application/pdf,.pdf" required>
+        <small>ไม่เกิน ${GUIDE_MAX_MB} MB · ไฟล์ที่เก่ากว่า ${STOCK_KEEP_DAYS} วันจะถูกลบอัตโนมัติ</small></label>
+    </div>`, "อัปโหลด");
+  wireDialog(async (d, form) => {
+    const file = form.elements.file.files[0];
+    if (!file) throw new Error("กรุณาเลือกไฟล์ PDF");
+    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") throw new Error("รองรับเฉพาะไฟล์ PDF");
+    if (file.size > GUIDE_MAX_MB * 1024 * 1024) throw new Error(`ไฟล์ใหญ่เกิน ${GUIDE_MAX_MB} MB`);
+    await api("POST", "/stock-reports", { warehouse_id: w.id, report_at: d.report_at, file_name: file.name, file_data: await fileBase64(file) });
+    toast(`อัปโหลดยอดคงคลัง ${w.name} แล้ว`);
+    refresh();
+  });
+}
+
 // ---------- เข้าสู่ระบบ: เลขบัตรประชาชน 13 หลัก + รหัสผ่าน (ครั้งแรกคือ 5 ตัวท้าย แล้วต้องตั้งใหม่) ----------
 
 function authScreen(setupMode) {
@@ -1800,12 +1873,13 @@ const VIEWS = {
   users: ["บัญชีผู้ใช้", usersView, "admin"],
   analytics: ["Dashboard", analyticsView],
   guidelines: ["แนวทางปฏิบัติ", guidelinesView],
+  stock: ["สินค้าคงคลัง", stockView],
 };
 // [หน้า, หัวข้อกลุ่มในแถบซ้าย]
 const NAV = {
-  dept: [["request"], ["requisitions"], ["regRequester", "ทะเบียน"], ["regReceiver"], ["departments"], ["analytics", "รายงาน"],
+  dept: [["request"], ["requisitions"], ["stock", "คลังสินค้า"], ["regRequester", "ทะเบียน"], ["regReceiver"], ["departments"], ["analytics", "รายงาน"],
     ["guidelines", "ประกาศ"]],
-  admin: [["approve"], ["requisitions"], ["request"], ["items", "คลังสินค้า"], ["movements"],
+  admin: [["approve"], ["requisitions"], ["request"], ["items", "คลังสินค้า"], ["stock"], ["movements"],
     ["regRequester", "ทะเบียน"], ["regReceiver"], ["regCentral"], ["departments"], ["users"], ["analytics", "รายงาน"],
     ["guidelines", "ประกาศ"]],
 };

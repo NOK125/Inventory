@@ -148,6 +148,17 @@ CREATE INDEX IF NOT EXISTS idx_req_dept ON requisitions(department_id, status);
 CREATE INDEX IF NOT EXISTS idx_req_created ON requisitions(created_at);
 CREATE INDEX IF NOT EXISTS idx_lines_req ON lines(requisition_id);
 CREATE INDEX IF NOT EXISTS idx_mov_item ON movements(item_id);
+CREATE TABLE IF NOT EXISTS stock_reports (
+    id INTEGER PRIMARY KEY,
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+    report_at TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_data BLOB NOT NULL,
+    created_at TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_stock_rep ON stock_reports(warehouse_id, report_at);
 """
 
 DEFAULT_WAREHOUSES = [
@@ -1113,23 +1124,29 @@ def list_guidelines(ctx, body, query):
     return rows(ctx.conn.execute(GUIDE_SQL + " ORDER BY g.created_at DESC, g.id DESC"))
 
 
+def pdf_from_body(body):
+    """ถอดไฟล์ PDF ที่ส่งมาแบบ base64 คืน (ข้อมูล, ชื่อไฟล์) หรือ (None, None) ถ้าไม่ได้แนบ"""
+    if not body.get("file_data"):
+        return None, None
+    try:
+        data = base64.b64decode(str(body["file_data"]), validate=True)
+    except ValueError:
+        raise ApiError(400, "อ่านไฟล์ไม่ได้ ลองเลือกไฟล์ใหม่")
+    if not data.startswith(b"%PDF-"):
+        raise ApiError(400, "รองรับเฉพาะไฟล์ PDF")
+    if len(data) > GUIDE_MAX_MB * 1024 * 1024:
+        raise ApiError(413, f"ไฟล์ใหญ่เกิน {GUIDE_MAX_MB} MB")
+    name = (text(body.get("file_name"), "ชื่อไฟล์") or "เอกสาร.pdf").replace("/", "_").replace("\\", "_")[:200]
+    if not name.lower().endswith(".pdf"):
+        name += ".pdf"
+    return data, name
+
+
 def create_guideline(ctx, body, query):
     ctx.require_admin()
     title = text(body.get("title"), "หัวข้อ", True)
     detail = text(body.get("body"), "รายละเอียด")
-    data = name = None
-    if body.get("file_data"):
-        try:
-            data = base64.b64decode(str(body["file_data"]), validate=True)
-        except ValueError:
-            raise ApiError(400, "อ่านไฟล์ไม่ได้ ลองเลือกไฟล์ใหม่")
-        if not data.startswith(b"%PDF-"):
-            raise ApiError(400, "รองรับเฉพาะไฟล์ PDF")
-        if len(data) > GUIDE_MAX_MB * 1024 * 1024:
-            raise ApiError(413, f"ไฟล์ใหญ่เกิน {GUIDE_MAX_MB} MB")
-        name = (text(body.get("file_name"), "ชื่อไฟล์") or "เอกสาร.pdf").replace("/", "_").replace("\\", "_")[:200]
-        if not name.lower().endswith(".pdf"):
-            name += ".pdf"
+    data, name = pdf_from_body(body)
     if not detail and data is None:
         raise ApiError(400, "กรุณาใส่รายละเอียดหรือแนบไฟล์ PDF อย่างน้อยหนึ่งอย่าง")
     gid = ctx.conn.execute("""INSERT INTO guidelines (title, body, file_name, file_size, file_data, created_at, created_by)
@@ -1150,6 +1167,53 @@ def guideline_file(ctx, body, query, gid):
     if not g or g["file_data"] is None:
         raise ApiError(404, "ไม่พบไฟล์")
     return FileResult(bytes(g["file_data"]), "application/pdf", g["file_name"])
+
+
+# ---------- สินค้าคงคลังรายวัน: ไฟล์ PDF ยอดคงคลังแยกตามคลัง ----------
+
+STOCK_KEEP_DAYS = 14  # เก็บไฟล์ต่อคลังย้อนหลังกี่วัน (เก่ากว่านี้ลบอัตโนมัติ เพื่อไม่ให้ฐานข้อมูลและไฟล์สำรองโตเร็ว)
+STOCK_SQL = """SELECT s.id, s.warehouse_id, s.report_at, s.file_name, s.file_size, s.created_at, u.full_name AS created_by_name
+               FROM stock_reports s LEFT JOIN users u ON u.id = s.created_by"""
+
+
+def list_stock_reports(ctx, body, query):
+    return rows(ctx.conn.execute(STOCK_SQL + " ORDER BY s.warehouse_id, s.report_at DESC, s.id DESC"))
+
+
+def create_stock_report(ctx, body, query):
+    ctx.require_admin()
+    wh = body.get("warehouse_id")
+    if not str(wh or "").isdigit() or not ctx.conn.execute("SELECT 1 FROM warehouses WHERE id = ?", (int(wh),)).fetchone():
+        raise ApiError(400, "กรุณาเลือกคลัง")
+    try:
+        report_at = datetime.fromisoformat(str(body.get("report_at") or "")).isoformat(timespec="seconds")
+    except ValueError:
+        raise ApiError(400, "กรุณาระบุวันที่และเวลาของยอดคงคลัง")
+    if report_at > (datetime.now() + timedelta(days=1)).isoformat(timespec="seconds"):
+        raise ApiError(400, "วันที่ของยอดคงคลังต้องไม่เป็นวันในอนาคต")
+    data, name = pdf_from_body(body)
+    if data is None:
+        raise ApiError(400, "กรุณาเลือกไฟล์ PDF")
+    sid = ctx.conn.execute("""INSERT INTO stock_reports (warehouse_id, report_at, file_name, file_size, file_data, created_at, created_by)
+                              VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                           (int(wh), report_at, name, len(data), data, now(), ctx.user["id"])).lastrowid
+    cutoff = (datetime.now() - timedelta(days=STOCK_KEEP_DAYS)).isoformat(timespec="seconds")
+    ctx.conn.execute("DELETE FROM stock_reports WHERE warehouse_id = ? AND report_at < ? AND id != ?", (int(wh), cutoff, sid))
+    return one(ctx.conn, STOCK_SQL + " WHERE s.id = ?", (sid,))
+
+
+def delete_stock_report(ctx, body, query, sid):
+    ctx.require_admin()
+    if not ctx.conn.execute("DELETE FROM stock_reports WHERE id = ?", (sid,)).rowcount:
+        raise ApiError(404, "ไม่พบไฟล์นี้")
+    return {"ok": True}
+
+
+def stock_report_file(ctx, body, query, sid):
+    s = one(ctx.conn, "SELECT file_name, file_data FROM stock_reports WHERE id = ?", (sid,))
+    if not s:
+        raise ApiError(404, "ไม่พบไฟล์")
+    return FileResult(bytes(s["file_data"]), "application/pdf", s["file_name"])
 
 
 def unapprove_requisition(ctx, body, query, req_id):
@@ -1436,6 +1500,10 @@ route("GET", "/guidelines", list_guidelines)
 route("POST", "/guidelines", create_guideline)
 route("DELETE", f"/guidelines/{ID}", delete_guideline)
 route("GET", f"/guidelines/{ID}/file", guideline_file)
+route("GET", "/stock-reports", list_stock_reports)
+route("POST", "/stock-reports", create_stock_report)
+route("DELETE", f"/stock-reports/{ID}", delete_stock_report)
+route("GET", f"/stock-reports/{ID}/file", stock_report_file)
 route("POST", f"/requisitions/{ID}/reject", reject_requisition)
 route("POST", f"/requisitions/{ID}/issue", issue_requisition)
 route("GET", "/summary", summary)
