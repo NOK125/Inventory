@@ -1883,7 +1883,7 @@ const VIEWS = {
 const NAV = {
   dept: [["request"], ["requisitions"], ["stock", "คลังสินค้า"], ["regRequester", "ทะเบียน"], ["regReceiver"], ["departments"], ["analytics", "รายงาน"],
     ["guidelines", "ประกาศ"]],
-  admin: [["approve"], ["requisitions"], ["request"], ["items", "คลังสินค้า"], ["stock"], ["movements"],
+  admin: [["approve"], ["requisitions"], ["request"], ["stock", "คลังสินค้า"], ["items"], ["movements"],
     ["regRequester", "ทะเบียน"], ["regReceiver"], ["regCentral"], ["departments"], ["users"], ["analytics", "รายงาน"],
     ["guidelines", "ประกาศ"]],
 };
