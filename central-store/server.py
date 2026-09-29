@@ -1063,6 +1063,23 @@ def set_requisition_names(ctx, body, query, req_id):
     return get_req(ctx, req_id)
 
 
+def set_requisition_people(ctx, body, query, req_id):
+    """ผู้ดูแลคลังแก้ชื่อและตำแหน่งผู้เบิก/ผู้อนุมัติ/ผู้จ่าย/ผู้รับ ได้ทุกสถานะยกเว้นยกเลิก ไม่แตะจำนวนหรือสต็อก"""
+    ctx.require_admin()
+    doc = get_req(ctx, req_id)
+    require_status(doc, "pending", "approved", "issued", "rejected")
+    # ชื่อที่ต้องมีตามสถานะ (เหมือนตอนอนุมัติ/จ่าย) ตำแหน่งเว้นว่างได้
+    need = {"requester": True, "approver": doc["status"] in ("approved", "issued", "rejected"),
+            "issuer": doc["status"] == "issued", "receiver": doc["status"] == "issued"}
+    label = {"requester": "ชื่อผู้เบิก", "approver": "ชื่อผู้อนุมัติ", "issuer": "ชื่อผู้จ่าย", "receiver": "ชื่อผู้รับ"}
+    values = {}
+    for role, required in need.items():
+        values[f"{role}_name"] = text(body.get(f"{role}_name"), label[role], required)
+        values[f"{role}_position"] = text(body.get(f"{role}_position"), "ตำแหน่ง")
+    ctx.conn.execute(f"UPDATE requisitions SET {', '.join(f'{k} = ?' for k in values)} WHERE id = ?", (*values.values(), req_id))
+    return get_req(ctx, req_id)
+
+
 def unapprove_requisition(ctx, body, query, req_id):
     ctx.require_admin()
     require_status(get_req(ctx, req_id), "approved")
@@ -1210,6 +1227,7 @@ route("POST", f"/requisitions/{ID}/cancel", cancel_requisition)
 route("POST", f"/requisitions/{ID}/approve", approve_requisition)
 route("POST", f"/requisitions/{ID}/unapprove", unapprove_requisition)
 route("POST", f"/requisitions/{ID}/names", set_requisition_names)
+route("POST", f"/requisitions/{ID}/people", set_requisition_people)
 route("POST", f"/requisitions/{ID}/reject", reject_requisition)
 route("POST", f"/requisitions/{ID}/issue", issue_requisition)
 route("GET", "/summary", summary)

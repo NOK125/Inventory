@@ -253,6 +253,48 @@ function personSelect(name, label, list, selected, hint = "") {
 const positionOf = (list, name, fallback = null) => list.find((p) => p.full_name === name)?.position ?? fallback;
 const centralDefault = (central, current) => current || central.find((p) => p.full_name === me.full_name)?.full_name || "";
 
+// ผู้ดูแลแก้ชื่อและตำแหน่งผู้เกี่ยวข้องในใบเบิก เลือกจากทะเบียนหรือพิมพ์เอง ไม่แตะจำนวนหรือสต็อก
+async function editPeople(doc) {
+  let lists, positions;
+  try {
+    const [central, requesters, receivers, pos] = await Promise.all([
+      api("GET", "/people?kind=central"),
+      api("GET", `/people?kind=requester&department_id=${doc.department_id}`),
+      api("GET", `/people?kind=receiver&department_id=${doc.department_id}`),
+      api("GET", "/positions"),
+    ]);
+    lists = { requester: requesters, approver: central, issuer: central, receiver: receivers };
+    positions = pos;
+  } catch (e) { return toast(e.message, true); }
+  const need = { requester: true, approver: ["approved", "issued", "rejected"].includes(doc.status),
+    issuer: doc.status === "issued", receiver: doc.status === "issued" };
+  const datalist = (id, values) => `<datalist id="${id}">${[...new Set(values)].map((v) => `<option value="${esc(v)}">`).join("")}</datalist>`;
+  const inner = ROLES.map((r) => `<div class="fields two person-edit">
+      <h3>${r.key === "approver" && doc.status === "rejected" ? "ผู้พิจารณา" : r.label}</h3>
+      ${fieldHtml({ name: `${r.key}_name`, label: "ชื่อ-นามสกุล", required: need[r.key], list: `dl-${r.key}`, autocomplete: "off",
+        value: doc[`${r.key}_name`] || "", placeholder: need[r.key] ? "" : "เว้นว่างได้" })}
+      ${fieldHtml({ name: `${r.key}_position`, label: "ตำแหน่ง", list: `dl-pos-${scopeOf(r.kind)}`, autocomplete: "off",
+        value: doc[`${r.key}_position`] || "" })}
+    </div>`).join("")
+    + ROLES.map((r) => datalist(`dl-${r.key}`, lists[r.key].map((p) => p.full_name))).join("")
+    + ["central", "dept"].map((s) => datalist(`dl-pos-${s}`, positions.filter((p) => p.scope === s).map((p) => p.name))).join("");
+  dlg.className = "";
+  dlg.innerHTML = dialogShell(`แก้ไขชื่อและตำแหน่ง · ${esc(doc.doc_no)}`,
+    `<p class="hint">เลือกชื่อจากทะเบียนหรือพิมพ์เองได้ เลือกจากทะเบียนแล้วตำแหน่งจะใส่ให้อัตโนมัติ · ไม่เปลี่ยนจำนวนหรือสต็อก</p>${inner}`, "บันทึก", "ย้อนกลับ");
+  const form = wireDialog(async (d) => {
+    await api("POST", `/requisitions/${doc.id}/people`, d);
+    toast(`บันทึกชื่อและตำแหน่งใน ${doc.doc_no} แล้ว`);
+    refresh();
+    setTimeout(() => openRequisition(doc.id)); // เปิดรายละเอียดใหม่หลัง dialog นี้ปิด
+  });
+  $("[data-cancel]", form).onclick = () => openRequisition(doc.id);
+  form.oninput = (e) => {
+    const m = e.target.name?.match(/^(\w+)_name$/);
+    const p = m && lists[m[1]].find((x) => x.full_name === e.target.value.trim());
+    if (p?.position) form.elements[`${m[1]}_position`].value = p.position;
+  };
+}
+
 async function openRequisition(id, mode = "view") {
   let doc;
   try { doc = await api("GET", `/requisitions/${id}`); } catch (e) { return toast(e.message, true); }
@@ -283,6 +325,7 @@ async function openRequisition(id, mode = "view") {
     if (admin && doc.status === "approved") buttons.push(btn("issue", "จ่ายของ", "", "primary"), btn("reject", "ไม่อนุมัติ", "", "danger"));
     if (!admin && doc.status === "pending") buttons.push(btn("edit", "แก้ไขใบเบิก", "", "outline"));
     if (doc.status === "pending") buttons.push(btn("cancel", "ยกเลิกใบเบิก", "", "danger"));
+    if (admin && doc.status !== "cancelled") buttons.push(btn("people", "แก้ไขชื่อ/ตำแหน่ง", "", "outline"));
     buttons.push(btn("print", "พิมพ์ใบเบิก"));
     body += `<div class="doc-actions">${buttons.join("")}</div>`;
   }
@@ -315,6 +358,7 @@ async function openRequisition(id, mode = "view") {
     const act = b.dataset.act;
     if (act === "approve" || act === "issue") return openRequisition(id, act);
     if (act === "print") return printRequisition(doc);
+    if (act === "people") return editPeople(doc);
     if (act === "edit") return startEdit(doc.id);
     if (act === "cancel") {
       if (!confirm(`ยกเลิกใบเบิก ${doc.doc_no}?`)) return;
