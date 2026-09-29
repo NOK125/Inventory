@@ -1046,6 +1046,20 @@ def approve_requisition(ctx, body, query, req_id):
     ctx.conn.executemany("UPDATE lines SET qty_approved = ? WHERE id = ?", [(q, lid) for lid, q in qty.items()])
     ctx.conn.execute("UPDATE requisitions SET status = 'approved', approver_name = ?, approver_position = ?, approved_at = ? WHERE id = ?",
                      (approver, text(body.get("approver_position"), "ตำแหน่ง"), now(), req_id))
+    # ผู้อนุมัติกำหนดผู้จ่ายไว้ล่วงหน้าได้ ตอนจ่ายจริงยังเปลี่ยนได้
+    if "issuer_name" in body:
+        ctx.conn.execute("UPDATE requisitions SET issuer_name = ?, issuer_position = ? WHERE id = ?",
+                         (text(body.get("issuer_name"), "ชื่อผู้จ่าย"), text(body.get("issuer_position"), "ตำแหน่ง"), req_id))
+    return get_req(ctx, req_id)
+
+
+def set_requisition_names(ctx, body, query, req_id):
+    """แก้ชื่อผู้อนุมัติ/ผู้จ่ายของใบที่อนุมัติแล้วแต่ยังไม่จ่าย โดยไม่ต้องยกเลิกอนุมัติ"""
+    ctx.require_admin()
+    require_status(get_req(ctx, req_id), "approved")
+    ctx.conn.execute("UPDATE requisitions SET approver_name = ?, approver_position = ?, issuer_name = ?, issuer_position = ? WHERE id = ?",
+                     (text(body.get("approver_name"), "ชื่อผู้อนุมัติ", True), text(body.get("approver_position"), "ตำแหน่ง"),
+                      text(body.get("issuer_name"), "ชื่อผู้จ่าย"), text(body.get("issuer_position"), "ตำแหน่ง"), req_id))
     return get_req(ctx, req_id)
 
 
@@ -1195,6 +1209,7 @@ route("PUT", f"/requisitions/{ID}", update_requisition)
 route("POST", f"/requisitions/{ID}/cancel", cancel_requisition)
 route("POST", f"/requisitions/{ID}/approve", approve_requisition)
 route("POST", f"/requisitions/{ID}/unapprove", unapprove_requisition)
+route("POST", f"/requisitions/{ID}/names", set_requisition_names)
 route("POST", f"/requisitions/{ID}/reject", reject_requisition)
 route("POST", f"/requisitions/{ID}/issue", issue_requisition)
 route("GET", "/summary", summary)

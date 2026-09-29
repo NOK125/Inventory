@@ -876,14 +876,22 @@ async function requisitionsView() {
 // ---------- อนุมัติและสรุปการเบิก (ผู้ดูแล) ----------
 // แถว = สินค้า คอลัมน์ = ใบเบิกแต่ละหน่วยงาน รวมยอดอนุมัติเทียบกับคงเหลือ
 
-const board = { filter: "all", edits: {}, approver: "", scroll: [0, 0] };
+// names: ชื่อผู้อนุมัติ/ผู้จ่ายที่แก้ในหน้านี้ แยกตามใบเบิก { [doc id]: { approver, issuer } }
+const board = { filter: "all", edits: {}, names: {}, scroll: [0, 0] };
 
 async function approveView() {
   const [docs, central] = await Promise.all([api("GET", "/requisitions/board"), api("GET", "/people?kind=central")]);
   docs.sort((a, b) => a.created_at.localeCompare(b.created_at));
   const pendingIds = new Set(docs.filter((d) => d.status === "pending").map((d) => String(d.id)));
   Object.keys(board.edits).forEach((id) => { if (!pendingIds.has(id)) delete board.edits[id]; });
-  if (!central.some((p) => p.full_name === board.approver)) board.approver = centralDefault(central, "") || central[0]?.full_name || "";
+  Object.keys(board.names).forEach((id) => { if (!pendingIds.has(id)) delete board.names[id]; });
+
+  // ชื่อที่แสดงในช่อง: ที่แก้ไว้ → ที่บันทึกในใบเบิก → (ผู้อนุมัติ) ผู้ที่ล็อกอินอยู่ถ้าอยู่ในทะเบียน
+  const nameOf = (d, role) => board.names[d.id]?.[role] ?? (d[`${role}_name`] || (role === "approver" ? centralDefault(central, "") : ""));
+  const posOf = (d, role) => positionOf(central, nameOf(d, role), nameOf(d, role) === d[`${role}_name`] ? d[`${role}_position`] : null);
+  const whoInput = (d, role, label, placeholder) => `<label class="who"><span>${label}</span>
+    <input class="who-input" list="central-people" data-doc="${d.id}" data-role="${role}" value="${esc(nameOf(d, role))}"
+      placeholder="${placeholder}" autocomplete="off" aria-label="${label} ใบ ${esc(d.doc_no)}"></label>`;
 
   const val = (d, l) => (d.status === "approved" ? l.qty_approved : board.edits[d.id]?.[l.id] ?? l.qty_requested);
   const items = new Map();
@@ -898,9 +906,9 @@ async function approveView() {
     })}
     <div class="board-bar"><div class="chips" id="filters"></div><span class="counts" id="counts"></span></div>
     <div class="matrix-wrap" id="matrix"></div>
+    <datalist id="central-people">${central.map((p) => `<option value="${esc(p.full_name)}">${esc(p.position || "")}</option>`).join("")}</datalist>
     <div class="panel board-foot">
-      <label><span>ผู้อนุมัติ</span><select id="approver">${central.map((p) => option(p.full_name,
-        `${p.full_name}${p.position ? ` · ${p.position.split(" (")[0]}` : ""}`, board.approver)).join("")}</select></label>
+      <span class="foot-hint">ใส่ชื่อผู้อนุมัติและผู้จ่ายที่หัวคอลัมน์ของแต่ละใบ เลือกจากทะเบียนเจ้าหน้าที่คลังกลางหรือพิมพ์เองได้</span>
       <span class="over-msg" id="over-msg" role="status"></span>
       <button type="button" class="btn primary lg" data-act="approve-all" id="approve-all"></button>
     </div>`;
@@ -935,6 +943,8 @@ async function approveView() {
           return `<th class="${done ? "is-approved" : ""}"><div class="doc-col">
             <b>${esc(d.department_name)}</b><small>${esc(d.doc_no)} · ${esc((d.requester_name || "").split(" ")[0])}</small>
             <div class="badges">${typeBadge(d.req_type)}${statusBadge(d.status)}</div>
+            ${whoInput(d, "approver", "ผู้อนุมัติ", "เลือกหรือพิมพ์ชื่อ")}
+            ${whoInput(d, "issuer", "ผู้จ่าย", "เว้นว่างได้ ใส่ตอนจ่าย")}
             ${done ? `<button type="button" class="link muted" data-act="unapprove" data-id="${d.id}">ยกเลิกอนุมัติ</button>`
               : `<button type="button" class="btn outline" data-act="approve-one" data-id="${d.id}">อนุมัติใบนี้</button>`}
           </div></th>`;
@@ -961,21 +971,40 @@ async function approveView() {
     board.scroll = [0, 0];
   });
 
-  const approver = () => central.find((p) => p.full_name === board.approver);
-  const approveDoc = async (d) => api("POST", `/requisitions/${d.id}/approve`, {
-    approver_name: board.approver, approver_position: approver()?.position ?? null,
-    lines: d.lines.map((l) => ({ line_id: l.id, qty_approved: val(d, l) })),
+  const names = (d) => ({
+    approver_name: nameOf(d, "approver"), approver_position: posOf(d, "approver"),
+    issuer_name: nameOf(d, "issuer"), issuer_position: posOf(d, "issuer"),
   });
+  const approveDoc = async (d) => api("POST", `/requisitions/${d.id}/approve`, {
+    ...names(d), lines: d.lines.map((l) => ({ line_id: l.id, qty_approved: val(d, l) })),
+  });
+  const missingApprover = (list) => list.find((d) => !nameOf(d, "approver").trim());
+  // PDF สรุป: ลงชื่อผู้อนุมัติได้เมื่อทุกใบที่อนุมัติแล้วใช้ผู้อนุมัติคนเดียวกัน
+  const summarySigner = () => {
+    const done = approvedDocs();
+    if (!done.length || done.some((d) => d.approver_name !== done[0].approver_name)) return null;
+    return { full_name: done[0].approver_name, position: done[0].approver_position };
+  };
   const reload = () => {
     board.scroll = [$("#matrix").scrollLeft, $("#matrix").scrollTop];
     return approveView().catch((e) => toast(e.message, true));
   };
   const docOf = (id) => docs.find((d) => String(d.id) === String(id));
 
-  view.onchange = (e) => {
+  view.onchange = async (e) => {
     const t = e.target;
     if (rendering) return;
-    if (t.id === "approver") board.approver = t.value;
+    if (t.matches(".who-input")) {
+      const d = docOf(t.dataset.doc);
+      board.names[d.id] = { ...(board.names[d.id] || {}), [t.dataset.role]: t.value.trim() };
+      if (d.status !== "approved") return; // ใบรออนุมัติ: ใช้ชื่อนี้ตอนกดอนุมัติ
+      try {
+        Object.assign(d, await api("POST", `/requisitions/${d.id}/names`, names(d)));
+        toast(`บันทึกชื่อใน ${d.doc_no} แล้ว`);
+      } catch (err) { toast(err.message, true); }
+      delete board.names[d.id];
+      return afterPointer(t, draw);
+    }
     if (t.matches(".qty-input")) {
       const d = docOf(t.dataset.doc);
       const l = d.lines.find((x) => String(x.id) === t.dataset.line);
@@ -985,14 +1014,15 @@ async function approveView() {
     }
   };
   view.onkeydown = (e) => {
+    if (e.key === "Enter" && e.target.matches(".who-input")) { e.preventDefault(); e.target.blur(); } // blur ทำให้เกิด change เอง
     if (e.key === "Enter" && e.target.matches(".qty-input")) { e.preventDefault(); e.target.dispatchEvent(new Event("change", { bubbles: true })); }
   };
   bind({
     filter: (k) => { board.filter = k; draw(); },
     "approve-one": async (id, b) => {
-      if (!board.approver) return toast("กรุณาเลือกผู้อนุมัติ", true);
-      b.disabled = true;
       const d = docOf(id);
+      if (missingApprover([d])) return toast(`กรุณาใส่ชื่อผู้อนุมัติของ ${d.doc_no}`, true);
+      b.disabled = true;
       try { await approveDoc(d); toast(`อนุมัติ ${d.doc_no} (${d.department_name}) แล้ว`); } catch (e) { toast(e.message, true); }
       reload();
     },
@@ -1002,15 +1032,16 @@ async function approveView() {
       reload();
     },
     "approve-all": async (_, b) => {
-      if (!board.approver) return toast("กรุณาเลือกผู้อนุมัติ", true);
       const list = docs.filter((d) => d.status === "pending" && (board.filter === "all" || d.req_type === board.filter));
+      const miss = missingApprover(list);
+      if (miss) return toast(`กรุณาใส่ชื่อผู้อนุมัติของ ${miss.doc_no}`, true);
       b.disabled = true;
       let n = 0;
       try { for (const d of list) { await approveDoc(d); n++; } toast(`อนุมัติ ${n} ใบเบิกแล้ว`); }
       catch (e) { toast(`อนุมัติแล้ว ${n} ใบ · ${e.message}`, true); }
       reload();
     },
-    pdf: () => openSummary(approvedDocs(), approver() || { full_name: board.approver }),
+    pdf: () => openSummary(approvedDocs(), summarySigner()),
   });
   draw();
 }
