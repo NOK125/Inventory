@@ -1775,6 +1775,78 @@ function uploadStockReport(w) {
   });
 }
 
+// ---------- แจ้งปัญหาคลังกลาง: หน่วยงานแจ้ง ผู้ดูแลตอบกลับ ----------
+
+const ISSUE_TYPES = { requisition: "ปัญหาการเบิก", system: "ปัญหาการใช้งานระบบ", delivery: "ปัญหาการส่ง/รับของ", other: "อื่น ๆ" };
+const ISSUE_STATUS = { open: ["รอดำเนินการ", "warn"], answered: ["ตอบกลับแล้ว", "ok"], closed: ["ปิดเรื่อง", "muted"] };
+let issueFilter = "";
+
+async function issuesView() {
+  const admin = me.role === "admin";
+  const list = await api("GET", `/issues${issueFilter ? `?status=${issueFilter}` : ""}`);
+  const form = admin ? "" : `<form class="panel pad issue-form" id="issue-form" novalidate>
+      <h2>แจ้งปัญหาใหม่</h2>
+      <div class="fields two">
+        ${fieldHtml({ name: "category", label: "ประเภทปัญหา", type: "select", required: true,
+          options: [["", "— เลือกประเภท —"], ...Object.entries(ISSUE_TYPES)] })}
+        ${fieldHtml({ name: "ref", label: "เลขที่ใบเบิก (ถ้ามี)", placeholder: "เช่น RQ69-0012", maxlength: 40 })}
+      </div>
+      <label class="field"><span>รายละเอียดปัญหา *</span>
+        <textarea name="message" rows="4" maxlength="2000" required placeholder="เล่าปัญหาที่พบ เช่น ของที่ได้รับไม่ครบ ขาดถุงมือ 2 กล่อง"></textarea></label>
+      <p class="form-error" hidden></p>
+      <div class="actions"><button type="submit" class="btn primary">ส่งถึงคลังกลาง</button></div>
+    </form>`;
+  const card = (i) => `<article class="panel pad issue">
+      <div class="issue-head">${badge(ISSUE_TYPES[i.category] || i.category, "brand")}${badge(...ISSUE_STATUS[i.status])}
+        ${i.ref ? `<span class="issue-ref">ใบเบิก ${esc(i.ref)}</span>` : ""}
+        <small>${when(i.created_at)} · ${esc(i.department_name || "คลังกลาง")} · ${esc(i.created_by_name || "")}</small></div>
+      <p class="issue-msg">${esc(i.message)}</p>
+      ${i.reply ? `<div class="issue-reply"><b>คลังกลางตอบกลับ</b><small>${esc(i.replied_by || "")} · ${when(i.replied_at)}</small><p>${esc(i.reply)}</p></div>` : ""}
+      ${admin ? `<form class="issue-answer" data-id="${i.id}">
+          <textarea name="reply" rows="2" maxlength="2000" placeholder="พิมพ์ข้อความตอบกลับหน่วยงาน">${esc(i.reply || "")}</textarea>
+          <div class="issue-answer-bar"><select name="status" aria-label="สถานะ">${Object.entries(ISSUE_STATUS).map(([k, [t]]) =>
+            option(k, t, i.status === "open" ? "answered" : i.status)).join("")}</select>
+          <button type="submit" class="btn primary small">บันทึก</button></div>
+        </form>` : ""}
+    </article>`;
+  const openCount = admin ? list.filter((i) => i.status === "open").length : 0;
+  view.innerHTML = `${pageHead("แจ้งปัญหาที่พบ", {
+      sub: admin ? "เรื่องที่หน่วยงานแจ้งเข้ามา ตอบกลับและปิดเรื่องเมื่อแก้ไขแล้ว"
+        : `แจ้งปัญหาการเบิก การใช้งานระบบ หรือการส่ง/รับของ ถึงคลังกลาง · ${esc(me.department_name || "")}`,
+    })}
+    ${form}
+    <div class="board-bar"><div class="chips">${[["", "ทั้งหมด"], ...Object.entries(ISSUE_STATUS).map(([k, [t]]) => [k, t])].map(([k, t]) =>
+      `<button type="button" class="chip" data-act="filter" data-id="${k}" aria-pressed="${issueFilter === k}">${t}</button>`).join("")}</div>
+      ${admin && !issueFilter ? `<span class="counts">รอดำเนินการ <b style="color:var(--warn)">${openCount}</b> เรื่อง</span>` : ""}</div>
+    <div class="stack">${list.length ? list.map(card).join("") : `<p class="empty panel">${issueFilter ? "ไม่มีเรื่องในสถานะนี้" : "ยังไม่มีเรื่องที่แจ้ง"}</p>`}</div>`;
+
+  const f = $("#issue-form");
+  if (f) f.onsubmit = async (e) => {
+    e.preventDefault();
+    const err = $(".form-error", f);
+    const d = Object.fromEntries(new FormData(f));
+    const btn = $("button[type=submit]", f);
+    btn.disabled = true; err.hidden = true;
+    try {
+      await api("POST", "/issues", d);
+      toast("ส่งเรื่องถึงคลังกลางแล้ว");
+      issueFilter = "";
+      await issuesView();
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
+  };
+  $$(".issue-answer").forEach((af) => (af.onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $("button", af);
+    btn.disabled = true;
+    try {
+      await api("POST", `/issues/${af.dataset.id}/reply`, Object.fromEntries(new FormData(af)));
+      toast("บันทึกการตอบกลับแล้ว");
+      await issuesView();
+    } catch (ex) { toast(ex.message, true); btn.disabled = false; }
+  }));
+  bind({ filter: (k) => { issueFilter = k; issuesView().catch((e) => toast(e.message, true)); } });
+}
+
 // เครดิตผู้พัฒนา มุมล่างซ้ายของหน้าเข้าสู่ระบบ (แถบซ้ายหลังล็อกอินอยู่ใน index.html ให้ข้อความตรงกัน)
 const CREDIT = `<div class="credit"><b>Powered by Somruthai K.</b><small>© 2026 All rights reserved · v1.0.0</small></div>`;
 
@@ -1878,14 +1950,15 @@ const VIEWS = {
   analytics: ["Dashboard", analyticsView],
   guidelines: ["แนวทางปฏิบัติ", guidelinesView],
   stock: ["สินค้าคงคลัง", stockView],
+  issues: ["แจ้งปัญหาที่พบ", issuesView],
 };
 // [หน้า, หัวข้อกลุ่มในแถบซ้าย]
 const NAV = {
   dept: [["request"], ["requisitions"], ["stock", "คลังสินค้า"], ["regRequester", "ทะเบียน"], ["regReceiver"], ["departments"], ["analytics", "รายงาน"],
-    ["guidelines", "ประกาศ"]],
+    ["guidelines", "ประกาศ"], ["issues", "ติดต่อคลังกลาง"]],
   admin: [["approve"], ["requisitions"], ["request"], ["stock", "คลังสินค้า"], ["items"], ["movements"],
     ["regRequester", "ทะเบียน"], ["regReceiver"], ["regCentral"], ["departments"], ["users"], ["analytics", "รายงาน"],
-    ["guidelines", "ประกาศ"]],
+    ["guidelines", "ประกาศ"], ["issues", "ติดต่อคลังกลาง"]],
 };
 const allowed = (key) => !VIEWS[key][2] || me?.role === VIEWS[key][2];
 const navLabel = (key) => (typeof VIEWS[key][0] === "function" ? VIEWS[key][0]() : VIEWS[key][0]);

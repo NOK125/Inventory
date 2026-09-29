@@ -159,6 +159,20 @@ CREATE TABLE IF NOT EXISTS stock_reports (
     created_by INTEGER REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_stock_rep ON stock_reports(warehouse_id, report_at);
+CREATE TABLE IF NOT EXISTS issues (
+    id INTEGER PRIMARY KEY,
+    category TEXT NOT NULL,
+    ref TEXT,
+    message TEXT NOT NULL,
+    department_id INTEGER REFERENCES departments(id),
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    reply TEXT,
+    replied_by TEXT,
+    replied_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_issues_dept ON issues(department_id, created_at);
 """
 
 DEFAULT_WAREHOUSES = [
@@ -1169,6 +1183,63 @@ def guideline_file(ctx, body, query, gid):
     return FileResult(bytes(g["file_data"]), "application/pdf", g["file_name"])
 
 
+# ---------- แจ้งปัญหาคลังกลาง: หน่วยงานแจ้ง ผู้ดูแลตอบกลับ ----------
+# บัญชีหน่วยงานเห็นเฉพาะเรื่องของหน่วยงานตัวเอง (เหมือนใบเบิก)
+
+ISSUE_TYPES = {"requisition": "ปัญหาการเบิก", "system": "ปัญหาการใช้งานระบบ", "delivery": "ปัญหาการส่ง/รับของ", "other": "อื่น ๆ"}
+ISSUE_STATUS = {"open": "รอดำเนินการ", "answered": "ตอบกลับแล้ว", "closed": "ปิดเรื่อง"}
+ISSUE_SQL = """SELECT i.*, d.name AS department_name, u.full_name AS created_by_name
+               FROM issues i LEFT JOIN departments d ON d.id = i.department_id LEFT JOIN users u ON u.id = i.created_by"""
+
+
+def get_issue(ctx, iid):
+    issue = one(ctx.conn, ISSUE_SQL + " WHERE i.id = ?", (iid,))
+    if not issue or (not ctx.admin and issue["department_id"] != ctx.user["department_id"]):
+        raise ApiError(404, "ไม่พบเรื่องนี้")
+    return issue
+
+
+def list_issues(ctx, body, query):
+    sql, params = ISSUE_SQL + " WHERE 1 = 1", []
+    if not ctx.admin:
+        sql += " AND i.department_id = ?"
+        params.append(ctx.user["department_id"])
+    status = query.get("status", [""])[0]
+    if status in ISSUE_STATUS:
+        sql += " AND i.status = ?"
+        params.append(status)
+    return rows(ctx.conn.execute(sql + " ORDER BY i.created_at DESC, i.id DESC LIMIT 500", params))
+
+
+def create_issue(ctx, body, query):
+    category = body.get("category")
+    if category not in ISSUE_TYPES:
+        raise ApiError(400, "กรุณาเลือกประเภทปัญหา")
+    message = text(body.get("message"), "รายละเอียดปัญหา", True)
+    if len(message) > 2000:
+        raise ApiError(400, "รายละเอียดยาวเกิน 2,000 ตัวอักษร")
+    ref = (text(body.get("ref"), "เลขที่ใบเบิก") or "")[:40] or None
+    iid = ctx.conn.execute("INSERT INTO issues (category, ref, message, department_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                           (category, ref, message, ctx.user["department_id"], ctx.user["id"], now())).lastrowid
+    return get_issue(ctx, iid)
+
+
+def reply_issue(ctx, body, query, iid):
+    ctx.require_admin()
+    get_issue(ctx, iid)
+    status = body.get("status") or "answered"
+    if status not in ISSUE_STATUS:
+        raise ApiError(400, "สถานะไม่ถูกต้อง")
+    reply = text(body.get("reply"), "ข้อความตอบกลับ")
+    if reply and len(reply) > 2000:
+        raise ApiError(400, "ข้อความตอบกลับยาวเกิน 2,000 ตัวอักษร")
+    if status == "answered" and not reply:
+        raise ApiError(400, "กรุณาพิมพ์ข้อความตอบกลับ")
+    ctx.conn.execute("UPDATE issues SET reply = ?, status = ?, replied_by = ?, replied_at = ? WHERE id = ?",
+                     (reply, status, ctx.user["full_name"] if reply else None, now() if reply else None, iid))
+    return get_issue(ctx, iid)
+
+
 # ---------- สินค้าคงคลังรายวัน: ไฟล์ PDF ยอดคงคลังแยกตามคลัง ----------
 
 STOCK_KEEP_DAYS = 14  # เก็บไฟล์ต่อคลังย้อนหลังกี่วัน (เก่ากว่านี้ลบอัตโนมัติ เพื่อไม่ให้ฐานข้อมูลและไฟล์สำรองโตเร็ว)
@@ -1504,6 +1575,9 @@ route("GET", "/stock-reports", list_stock_reports)
 route("POST", "/stock-reports", create_stock_report)
 route("DELETE", f"/stock-reports/{ID}", delete_stock_report)
 route("GET", f"/stock-reports/{ID}/file", stock_report_file)
+route("GET", "/issues", list_issues)
+route("POST", "/issues", create_issue)
+route("POST", f"/issues/{ID}/reply", reply_issue)
 route("POST", f"/requisitions/{ID}/reject", reject_requisition)
 route("POST", f"/requisitions/{ID}/issue", issue_requisition)
 route("GET", "/summary", summary)
