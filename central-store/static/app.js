@@ -1553,7 +1553,7 @@ async function analyticsView() {
     <div class="kpis">
       ${kpi("ใบเบิกทั้งหมด", num(t.requisitions), `เฉลี่ย ${num(Math.round(t.requisitions / Math.max(1, a.weeks.length)))} ใบ/สัปดาห์`)}
       ${kpi("เบิกฉุกเฉิน", num(t.emergency), `${pctE}% ของใบเบิกทั้งหมด`, "tone-bad")}
-      ${kpi("รายการที่จ่ายออก", num(t.lines_issued), `จาก ${num(a.by_warehouse.filter((w) => w.lines).length)} คลัง`)}
+      ${kpi("รายการที่อนุมัติเบิก", num(t.lines_approved), `จาก ${num(a.by_warehouse.filter((w) => w.lines).length)} คลัง`)}
       ${kpi("เวลาเฉลี่ยจนได้รับของ", dur(t.avg_hours), `ฉุกเฉินเฉลี่ย ${dur(t.avg_hours_emergency)}`, "tone-brand")}
     </div>
     <div class="charts">
@@ -1567,7 +1567,7 @@ async function analyticsView() {
         <div class="week-labels">${a.weeks.map((w) => `<span>${when(w.start, false).slice(0, 5)}</span>`).join("")}</div>
       </section>
       <section class="chart">
-        <div class="chart-title"><b>สถิติการใช้สินค้าตามประเภทคลัง</b><small>จำนวนรายการที่จ่ายออก</small></div>
+        <div class="chart-title"><b>สถิติการใช้สินค้าตามประเภทคลัง</b><small>จำนวนรายการที่อนุมัติเบิก (ใบที่อนุมัติแล้วและจ่ายแล้ว)</small></div>
         ${a.by_warehouse.map((w) => `<div class="hbar"><span title="${esc(w.name)}">${esc(w.name)}</span>
           <div class="track"><div class="fill" style="width:${(w.lines / maxC) * 100}%;--h:${Number(w.hue) || 0}"></div></div><b>${num(w.lines)}</b></div>`).join("")}
       </section>
@@ -1580,7 +1580,7 @@ async function analyticsView() {
           <span class="v"><b>${num(d.total)}</b> <small>(${num(d.emergency)})</small></span></div>`).join("") : `<p class="empty">ยังไม่มีข้อมูล</p>`}
       </section>
       <section class="chart" style="gap:4px">
-        <div class="chart-title" style="padding-bottom:8px"><b>สินค้าที่เบิกมากที่สุด</b></div>
+        <div class="chart-title" style="padding-bottom:8px"><b>สินค้าที่เบิกมากที่สุด</b><small>รวมจำนวนที่อนุมัติ</small></div>
         ${a.top_items.length ? a.top_items.map((it, i) => `<div class="top-row"><b>${i + 1}</b><div><span>${esc(it.name)}</span><small>${esc(it.warehouse_name)}</small></div>
           <span class="qty-u">${num(it.qty)} <small>${esc(it.unit)}</small></span></div>`).join("") : `<p class="empty">ยังไม่มีข้อมูล</p>`}
       </section>

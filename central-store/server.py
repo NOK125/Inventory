@@ -1140,12 +1140,14 @@ def analytics(ctx, body, query):
     for d in docs:
         w = min(weeks_n - 1, (datetime.fromisoformat(d["created_at"]) - start).days // 7)
         weeks[w][d["req_type"]] += 1
-    issued = rows(ctx.conn.execute("""SELECT l.qty_issued, i.id AS item_id, i.name, i.unit, i.warehouse_id, w.name AS warehouse_name
+    # สถิติการใช้สินค้านับจากจำนวนที่อนุมัติ (อนุมัติแล้วและจ่ายแล้ว) ไม่ใช่จำนวนจ่ายจริง
+    # เพื่อให้เห็นความต้องการแม้ของในคลังไม่พอจ่าย
+    approved = rows(ctx.conn.execute("""SELECT l.qty_approved AS qty, i.id AS item_id, i.name, i.unit, i.warehouse_id, w.name AS warehouse_name
         FROM lines l JOIN requisitions r ON r.id = l.requisition_id JOIN items i ON i.id = l.item_id JOIN warehouses w ON w.id = i.warehouse_id
-        WHERE r.created_at >= ? AND r.status = 'issued' AND l.qty_issued > 0""", (start_s,)))
+        WHERE r.created_at >= ? AND r.status IN ('approved', 'issued') AND l.qty_approved > 0""", (start_s,)))
     by_wh = []
     for w in ctx.conn.execute("SELECT * FROM warehouses ORDER BY id"):
-        by_wh.append({"warehouse_id": w["id"], "name": w["name"], "hue": w["hue"], "lines": sum(1 for l in issued if l["warehouse_id"] == w["id"])})
+        by_wh.append({"warehouse_id": w["id"], "name": w["name"], "hue": w["hue"], "lines": sum(1 for l in approved if l["warehouse_id"] == w["id"])})
     by_wh.sort(key=lambda x: -x["lines"])
     by_dept = []
     for d in ctx.conn.execute("SELECT id, name FROM departments"):
@@ -1154,9 +1156,9 @@ def analytics(ctx, body, query):
             by_dept.append({"name": d["name"], "total": len(mine), "emergency": sum(1 for r in mine if r["req_type"] == "emergency")})
     by_dept.sort(key=lambda x: -x["total"])
     totals = {}
-    for l in issued:
+    for l in approved:
         t = totals.setdefault(l["item_id"], {"name": l["name"], "unit": l["unit"], "warehouse_name": l["warehouse_name"], "qty": 0})
-        t["qty"] += l["qty_issued"]
+        t["qty"] += l["qty"]
     top = sorted(totals.values(), key=lambda x: -x["qty"])[:5]
 
     def avg_hours(items):
@@ -1170,7 +1172,7 @@ def analytics(ctx, body, query):
         "totals": {
             "requisitions": len(docs),
             "emergency": sum(1 for r in docs if r["req_type"] == "emergency"),
-            "lines_issued": len(issued),
+            "lines_approved": len(approved),
             "avg_hours": avg_hours(done),
             "avg_hours_emergency": avg_hours([r for r in done if r["req_type"] == "emergency"]),
         },
