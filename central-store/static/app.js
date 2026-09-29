@@ -395,8 +395,8 @@ function printRequisition(doc) {
     </div>`;
   const rejected = doc.status === "rejected";
   $("#print").innerHTML = `
-    <h1>ใบเบิกเวชภัณฑ์และพัสดุ</h1>
-    <p class="center">งานบริหารเวชภัณฑ์ (คลังกลาง) โรงพยาบาลตาพระยา</p>
+    <h1>ใบเบิกวัสดุ</h1>
+    <p class="center">งานบริหารเวชภัณฑ์ (คลังกลาง) โรงพยาบาลตาพระยา<br>โทร 037-269009 ต่อ 1403</p>
     <div class="print-head">
       <div><b>เลขที่:</b> ${esc(doc.doc_no)}</div>
       <div><b>วันที่:</b> ${when(doc.created_at, false)}</div>
