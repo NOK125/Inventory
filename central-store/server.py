@@ -1165,10 +1165,23 @@ def analytics(ctx, body, query):
         hours = [(datetime.fromisoformat(r["issued_at"]) - datetime.fromisoformat(r["created_at"])).total_seconds() / 3600 for r in items]
         return sum(hours) / len(hours) if hours else None
 
+    # สินค้าที่เปิดให้เบิกแต่ไม่มีใครเบิกเลยใน 30 วันล่าสุด (นับใบทุกสถานะยกเว้นยกเลิก/ไม่อนุมัติ)
+    idle_since = (end - timedelta(days=30)).isoformat(timespec="seconds")
+    idle = rows(ctx.conn.execute("""
+        SELECT i.id, i.code, i.name, i.unit, i.qty, w.name AS warehouse_name,
+               (SELECT MAX(r.created_at) FROM lines l JOIN requisitions r ON r.id = l.requisition_id
+                WHERE l.item_id = i.id AND r.status NOT IN ('cancelled', 'rejected')) AS last_requested
+        FROM items i JOIN warehouses w ON w.id = i.warehouse_id
+        WHERE i.active = 1 AND NOT EXISTS (
+            SELECT 1 FROM lines l JOIN requisitions r ON r.id = l.requisition_id
+            WHERE l.item_id = i.id AND r.created_at >= ? AND r.status NOT IN ('cancelled', 'rejected'))
+        ORDER BY w.id, i.code""", (idle_since,))) if ctx.admin else []
+
     done = [r for r in docs if r["issued_at"]]
     return {
         "from": start_s, "to": end.isoformat(timespec="seconds"), "weeks": weeks,
         "by_warehouse": by_wh, "by_department": by_dept[:6], "top_items": top,
+        "idle_since": idle_since, "idle_items": idle,
         "totals": {
             "requisitions": len(docs),
             "emergency": sum(1 for r in docs if r["req_type"] == "emergency"),

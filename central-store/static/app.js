@@ -1589,10 +1589,12 @@ async function analyticsView() {
       <section class="chart"><div class="chart-title"><b>ใบเบิกที่ต้องดำเนินการ</b>
           <button type="button" class="link" data-act="go" data-id="approve">ไปหน้าอนุมัติ →</button></div>
         ${table(["เลขที่", "หน่วยงาน", "ประเภท", "สถานะ"], s.waiting.map((r) => [`<b class="doc-no">${esc(r.doc_no)}</b>`, esc(r.department_name), typeBadge(r.req_type), statusBadge(r.status)]), "ไม่มีใบเบิกค้าง")}</section>
-      <section class="chart"><div class="chart-title"><b>สินค้าใกล้หมด</b>
-          <button type="button" class="link" data-act="go" data-id="items">สินค้า/สต็อก →</button></div>
-        ${table(["รายการ", "คลัง", ["คงเหลือ", "num"], ["จุดสั่งซื้อ", "num"]], s.low_stock.map((i) => [esc(i.name), esc(i.warehouse_name || "-"),
-          [`<span class="${i.qty <= 0 ? "minus" : ""}">${num(i.qty)}</span> ${esc(i.unit)}`, "num"], [num(i.min_qty), "num"]]), "สต็อกปกติทุกรายการ")}</section>
+      <section class="chart"><div class="chart-title"><b>สินค้าที่ไม่มีการเบิก</b>
+          <button type="button" class="link" data-act="go" data-id="items">สินค้า/สต็อก →</button>
+          <small>ย้อนหลัง 30 วัน (ตั้งแต่ ${when(a.idle_since, false)}) · ${num(a.idle_items.length)} รายการ · เฉพาะสินค้าที่เปิดให้เบิก</small></div>
+        <div class="idle-scroll">${table(["รายการ", "คลัง", ["คงเหลือ", "num"], "เบิกล่าสุด"], a.idle_items.map((i) => [esc(i.name), esc(i.warehouse_name),
+          [`${num(i.qty)} ${esc(i.unit)}`, "num"], i.last_requested ? when(i.last_requested, false) : `<small>ไม่เคยเบิก</small>`]),
+          "ทุกรายการมีการเบิกใน 30 วันที่ผ่านมา")}</div></section>
     </div>` : ""}`;
   bind({ go: (tab) => show(tab) });
 }
