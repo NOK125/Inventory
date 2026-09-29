@@ -389,6 +389,7 @@ input:disabled { background: var(--chip); color: var(--muted); }
 .doc-col .who span { font-size: 11px; color: var(--muted); }
 .doc-col .who-input { height: 30px; padding: 0 8px; font-size: 12.5px; border-radius: 7px; }
 .board-foot .foot-hint { font-size: 13px; color: var(--muted); }
+.head-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .doc-col b { font-size: 13.5px; line-height: 1.25; }
 .doc-col small { font-size: 11.5px; }
 .doc-col .badges { display: flex; flex-wrap: wrap; gap: 4px; }

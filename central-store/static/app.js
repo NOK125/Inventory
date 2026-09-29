@@ -902,7 +902,8 @@ async function approveView() {
 
   view.innerHTML = `${pageHead("อนุมัติและสรุปการเบิก", {
       over: `<span class="badge dark">ADMIN</span><span>ใบเบิกที่ส่งถึง ${when(nowTs())}</span>`,
-      right: `<button type="button" class="btn outline" data-act="pdf" id="pdf-btn" title="ดาวน์โหลดเฉพาะใบเบิกที่อนุมัติแล้ว"><span class="tag">PDF</span><span>ดาวน์โหลดสรุป (<span id="pdf-n">0</span> ใบ)</span></button>`,
+      right: `<div class="head-btns"><button type="button" class="btn outline" data-act="pdf-history" title="ใบที่อนุมัติแล้วและจ่ายแล้ว เลือกตามวันที่อนุมัติ">PDF ย้อนหลัง</button>
+        <button type="button" class="btn outline" data-act="pdf" id="pdf-btn" title="ดาวน์โหลดเฉพาะใบเบิกที่อนุมัติแล้ว"><span class="tag">PDF</span><span>ดาวน์โหลดสรุป (<span id="pdf-n">0</span> ใบ)</span></button></div>`,
     })}
     <div class="board-bar"><div class="chips" id="filters"></div><span class="counts" id="counts"></span></div>
     <div class="matrix-wrap" id="matrix"></div>
@@ -979,12 +980,6 @@ async function approveView() {
     ...names(d), lines: d.lines.map((l) => ({ line_id: l.id, qty_approved: val(d, l) })),
   });
   const missingApprover = (list) => list.find((d) => !nameOf(d, "approver").trim());
-  // PDF สรุป: ลงชื่อผู้อนุมัติได้เมื่อทุกใบที่อนุมัติแล้วใช้ผู้อนุมัติคนเดียวกัน
-  const summarySigner = () => {
-    const done = approvedDocs();
-    if (!done.length || done.some((d) => d.approver_name !== done[0].approver_name)) return null;
-    return { full_name: done[0].approver_name, position: done[0].approver_position };
-  };
   const reload = () => {
     board.scroll = [$("#matrix").scrollLeft, $("#matrix").scrollTop];
     return approveView().catch((e) => toast(e.message, true));
@@ -1041,18 +1036,28 @@ async function approveView() {
       catch (e) { toast(`อนุมัติแล้ว ${n} ใบ · ${e.message}`, true); }
       reload();
     },
-    pdf: () => openSummary(approvedDocs(), summarySigner()),
+    pdf: () => { const done = approvedDocs(); openSummary(done, { approver: commonPerson(done, "approver"), issuer: commonPerson(done, "issuer") }); },
+    "pdf-history": () => openPdfHistory(),
   });
   draw();
 }
 
-function summaryHtml(docs, approver) {
+// ผู้ลงนามในสรุป: ใส่ชื่อให้เมื่อทุกใบใช้คนเดียวกัน ไม่งั้นเว้นให้เขียนเอง
+function commonPerson(docs, role) {
+  const name = docs[0]?.[`${role}_name`];
+  if (!name || docs.some((d) => d[`${role}_name`] !== name)) return null;
+  return { full_name: name, position: docs.find((d) => d[`${role}_position`])?.[`${role}_position`] || null };
+}
+const fileDate = (ymd) => { const [y, m, d] = ymd.split("-"); return `${d}-${m}-${Number(y) + 543}`; };
+
+function summaryHtml(docs, { approver, issuer, dateText } = {}) {
+  const sign = (p, role) => `<div class="sign">ลงชื่อ ................................................ ${role}<br>( ${esc(p?.full_name || "................................................")} )<br>${esc(p?.position || "ตำแหน่ง ........................................")}</div>`;
   const items = new Map();
   docs.forEach((d) => d.lines.forEach((l) => { if (!items.has(l.item_id)) items.set(l.item_id, l); }));
   const list = [...items.values()].sort((a, b) => a.warehouse_id - b.warehouse_id || a.code.localeCompare(b.code));
   const qty = (d, itemId) => d.lines.find((l) => l.item_id === itemId)?.qty_approved;
   return `<h1>สรุปการอนุมัติเบิกเวชภัณฑ์และพัสดุ</h1>
-    <p class="center">งานบริหารเวชภัณฑ์ (คลังกลาง) โรงพยาบาลตาพระยา<br>วันที่ ${when(nowTs(), false)} · ใบเบิก ${esc(docs.map((d) => d.doc_no).join(", "))}</p>
+    <p class="center">งานบริหารเวชภัณฑ์ (คลังกลาง) โรงพยาบาลตาพระยา<br>${esc(dateText || `วันที่ ${when(nowTs(), false)}`)} · ใบเบิก ${esc(docs.map((d) => d.doc_no).join(", "))}</p>
     <table>
       <thead><tr><th>ลำดับ</th><th>รายการ</th><th>หน่วย</th>${docs.map((d) => `<th class="num">${esc(d.department_code)}</th>`).join("")}<th class="num">รวม</th></tr></thead>
       <tbody>${list.map((it, i) => `<tr><td>${i + 1}</td><td>${esc(it.name)}</td><td>${esc(it.unit)}</td>
@@ -1060,16 +1065,14 @@ function summaryHtml(docs, approver) {
         <td class="num"><b>${num(docs.reduce((a, d) => a + (Number(qty(d, it.item_id)) || 0), 0))}</b></td></tr>`).join("")}</tbody>
     </table>
     <div class="legend-list">${docs.map((d) => `<span>${esc(d.department_code)} = ${esc(d.department_name)} (${esc(d.doc_no)}, ${esc(REQ_TYPE[d.req_type]?.[0] || "-")}) ผู้เบิก ${esc(d.requester_name)}</span>`).join("")}</div>
-    <div class="signs">
-      <div class="sign">ลงชื่อ ................................................ ผู้อนุมัติ<br>( ${esc(approver?.full_name || "................................................")} )<br>${esc(approver?.position || "ตำแหน่ง ........................................")}</div>
-      <div class="sign">ลงชื่อ ................................................ ผู้จ่าย<br>( ................................................ )<br>ตำแหน่ง ........................................</div>
-    </div>`;
+    <div class="signs">${sign(approver, "ผู้อนุมัติ")}${sign(issuer, "ผู้จ่าย")}</div>`;
 }
 
 // ดาวน์โหลด PDF ผ่านหน้าพิมพ์ของเบราว์เซอร์ (เลือก "บันทึกเป็น PDF") ไม่ต้องใช้ไลบรารีเพิ่ม
-function openSummary(docs, approver) {
+// opts: { approver, issuer, dateText, fileName }
+function openSummary(docs, opts = {}) {
   if (!docs.length) return;
-  const html = summaryHtml(docs, approver);
+  const html = summaryHtml(docs, opts);
   dlg.className = "wide";
   dlg.innerHTML = dialogShell("ตัวอย่างไฟล์ PDF",
     `<p class="hint">A4 ขาวดำ เฉพาะใบเบิกที่อนุมัติแล้ว พร้อมช่องลงชื่อ · กด "ดาวน์โหลด PDF" แล้วเลือกเครื่องพิมพ์ <b>บันทึกเป็น PDF</b> (Save as PDF)</p>
@@ -1077,10 +1080,40 @@ function openSummary(docs, approver) {
   wireDialog(() => {
     $("#print").innerHTML = html;
     const title = document.title;
-    const [y, m, d] = nowTs().slice(0, 10).split("-");
-    document.title = `สรุปอนุมัติเบิก_${d}-${m}-${Number(y) + 543}`;
+    document.title = opts.fileName || `สรุปอนุมัติเบิก_${fileDate(nowTs().slice(0, 10))}`;
     window.print();
     document.title = title;
+  });
+}
+
+// PDF สรุปย้อนหลัง: ใบที่อนุมัติแล้วและที่จ่ายแล้ว เลือกตามวันที่อนุมัติ
+function openPdfHistory() {
+  const today = nowTs().slice(0, 10);
+  openForm({
+    title: "ดาวน์โหลด PDF สรุปย้อนหลัง",
+    intro: `<p class="hint">รวมใบเบิกที่อนุมัติแล้วและที่จ่ายแล้ว ตามวันที่อนุมัติ (ใบที่ไม่อนุมัติหรือยกเลิกไม่รวม)</p>`,
+    fields: [
+      { name: "from", label: "อนุมัติตั้งแต่วันที่", type: "date", required: true, value: today },
+      { name: "to", label: "ถึงวันที่", type: "date", required: true, value: today },
+      { name: "req_type", label: "ประเภทการเบิก", type: "select", options: [["", "ทั้งหมด"], ["emergency", "ฉุกเฉิน"], ["routine", "ตามรอบปกติ"]] },
+    ],
+    submitLabel: "ดูตัวอย่าง PDF",
+    onSubmit: async (d) => {
+      if (d.from > d.to) throw new Error("วันที่เริ่มต้องไม่หลังวันที่สิ้นสุด");
+      const lists = await Promise.all(["approved", "issued"].map((s) => api("GET", `/requisitions?status=${s}&limit=5000`)));
+      const hits = lists.flat().filter((r) => r.approved_at && (!d.req_type || r.req_type === d.req_type)
+        && r.approved_at.slice(0, 10) >= d.from && r.approved_at.slice(0, 10) <= d.to);
+      if (!hits.length) throw new Error("ไม่พบใบเบิกที่อนุมัติในช่วงวันที่นี้");
+      const docs = (await Promise.all(hits.map((r) => api("GET", `/requisitions/${r.id}`))))
+        .sort((a, b) => a.approved_at.localeCompare(b.approved_at));
+      const one = d.from === d.to;
+      // เปิดหลังหน้าต่างนี้ปิดแล้ว (wireDialog ปิด dialog หลัง onSubmit)
+      setTimeout(() => openSummary(docs, {
+        approver: commonPerson(docs, "approver"), issuer: commonPerson(docs, "issuer"),
+        dateText: `อนุมัติวันที่ ${when(d.from, false)}${one ? "" : ` ถึง ${when(d.to, false)}`}`,
+        fileName: `สรุปอนุมัติเบิก_${fileDate(d.from)}${one ? "" : `_ถึง_${fileDate(d.to)}`}`,
+      }));
+    },
   });
 }
 
