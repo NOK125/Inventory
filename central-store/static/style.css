@@ -396,6 +396,7 @@ input:disabled { background: var(--chip); color: var(--muted); }
 .guide-head h2 { font-size: 17px; margin-right: auto; }
 .guide-head small { font-size: 12.5px; }
 .guide-body { white-space: pre-wrap; margin: 10px 0 0; line-height: 1.6; }
+.guide-pdf { display: block; width: 100%; height: 80vh; min-height: 480px; margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
 .guide-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .guide-actions a.btn { gap: 8px; max-width: 100%; text-decoration: none; }
 .guide-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

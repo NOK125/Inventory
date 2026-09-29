@@ -1658,9 +1658,10 @@ async function guidelinesView() {
         <div class="guide-head"><h2>${esc(g.title)}</h2>
           <small>ประกาศ ${when(g.created_at)}${g.created_by_name ? ` · ${esc(g.created_by_name)}` : ""}</small></div>
         ${g.body ? `<p class="guide-body">${esc(g.body)}</p>` : ""}
+        ${g.file_name ? `<iframe class="guide-pdf" src="/api/guidelines/${g.id}/file#navpanes=0&view=FitH" title="${esc(g.file_name)}" loading="lazy"></iframe>` : ""}
         <div class="guide-actions">
-          ${g.file_name ? `<a class="btn outline" href="/api/guidelines/${g.id}/file" target="_blank" rel="noopener">
-            <span class="tag">PDF</span><span class="guide-file">${esc(g.file_name)}</span><small>${fileSize(g.file_size)}</small></a>` : ""}
+          ${g.file_name ? `<a class="btn outline" href="/api/guidelines/${g.id}/file" target="_blank" rel="noopener" title="เปิดเต็มจอในแท็บใหม่ หรือดาวน์โหลด">
+            <span class="tag">PDF</span><span class="guide-file">${esc(g.file_name)}</span><small>${fileSize(g.file_size)} · เปิดเต็มจอ</small></a>` : ""}
           ${admin ? `<button type="button" class="btn small danger" data-act="del" data-id="${g.id}">ลบประกาศ</button>` : ""}
         </div></article>`).join("") : `<p class="empty panel">ยังไม่มีประกาศ${admin ? ` กด "+ เพิ่มประกาศ" เพื่อเริ่ม` : ""}</p>`}</div>`;
   bind({
