@@ -598,6 +598,9 @@ body.auth main { padding: 0; }
 .print-doc th, .print-doc td { border: 1px solid #000; padding: .25rem .45rem; color: #000; background: #fff; font-size: inherit; }
 .print-doc th { font-weight: 700; }
 .print-doc .num { text-align: right; }
+.print-doc h2 { font-size: 1rem; margin: 1.1rem 0 .35rem; break-after: avoid; }
+.print-doc thead { display: table-header-group; }
+.print-doc tr { break-inside: avoid; }
 .print-doc .legend-list { margin: .6rem 0 0; display: grid; gap: .1rem; }
 .print-doc .signs { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem 2rem; margin-top: 2.5rem; break-inside: avoid; }
 .print-doc .sign { text-align: center; line-height: 1.9; }

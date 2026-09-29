@@ -1094,9 +1094,9 @@ def set_requisition_people(ctx, body, query, req_id):
 # ---------- แนวทางปฏิบัติ: ประกาศพร้อมไฟล์ PDF (เก็บในฐานข้อมูล จึงถูกสำรองไปพร้อมกัน) ----------
 
 class FileResult:
-    """ผลลัพธ์ของ handler ที่ต้องส่งเป็นไฟล์แทน JSON"""
-    def __init__(self, data, content_type, filename):
-        self.data, self.content_type, self.filename = data, content_type, filename
+    """ผลลัพธ์ของ handler ที่ต้องส่งเป็นไฟล์แทน JSON (inline = เปิดในเบราว์เซอร์, attachment = ดาวน์โหลด)"""
+    def __init__(self, data, content_type, filename, disposition="inline"):
+        self.data, self.content_type, self.filename, self.disposition = data, content_type, filename, disposition
 
 
 GUIDE_SQL = """SELECT g.id, g.title, g.body, g.file_name, g.file_size, g.created_at, u.full_name AS created_by_name
@@ -1258,6 +1258,125 @@ def analytics(ctx, body, query):
     }
 
 
+# ---------- ส่งออก Dashboard เป็น Excel (.xlsx สร้างเองด้วย zipfile ไม่ใช้ไลบรารีเพิ่ม) ----------
+
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+REQ_TYPE_TH = {"emergency": "ฉุกเฉิน", "routine": "ตามรอบปกติ"}
+
+
+def th_date(ts, with_time=False):
+    """2026-09-29T12:34:56 -> 29/09/2569 (12:34)"""
+    if not ts:
+        return ""
+    d = datetime.fromisoformat(ts)
+    return f"{d:%d/%m}/{d.year + 543}" + (f" {d:%H:%M}" if with_time else "")
+
+
+def xml_escape(s):
+    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", s)  # อักขระควบคุมที่ XML ไม่รับ
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def build_xlsx(sheets):
+    """sheets = [(ชื่อชีต, [[แถวหัวตาราง], [แถวข้อมูล], ...])] แถวแรกเป็นตัวหนา ตัวเลขเป็นตัวเลขจริงใน Excel"""
+    def col(i):
+        s = ""
+        i += 1
+        while i:
+            i, r = divmod(i - 1, 26)
+            s = chr(65 + r) + s
+        return s
+
+    def cell(ref, v, bold):
+        style = ' s="1"' if bold else ""
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return f'<c r="{ref}"{style}><v>{v:g}</v></c>'
+        return f'<c r="{ref}" t="inlineStr"{style}><is><t xml:space="preserve">{xml_escape(str(v if v is not None else ""))}</t></is></c>'
+
+    def sheet_xml(data):
+        widths = [max(10, min(60, max(len(str(r[c])) if c < len(r) and r[c] is not None else 0 for r in data) + 2))
+                  for c in range(max((len(r) for r in data), default=0))]
+        cols = "".join(f'<col min="{i + 1}" max="{i + 1}" width="{w}" customWidth="1"/>' for i, w in enumerate(widths))
+        body = "".join(f'<row r="{n + 1}">' + "".join(cell(f"{col(c)}{n + 1}", v, n == 0) for c, v in enumerate(r)) + "</row>"
+                       for n, r in enumerate(data))
+        return ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+                f'{"<cols>" + cols + "</cols>" if cols else ""}<sheetData>{body}</sheetData></worksheet>')
+
+    ns = "http://schemas.openxmlformats.org"
+    names = [re.sub(r"[\[\]:*?/\\]", " ", n)[:31] for n, _ in sheets]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                   f'<Types xmlns="{ns}/package/2006/content-types">'
+                   '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                   '<Default Extension="xml" ContentType="application/xml"/>'
+                   '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                   '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+                   + "".join(f'<Override PartName="/xl/worksheets/sheet{i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+                             for i in range(len(sheets))) + "</Types>")
+        z.writestr("_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                   f'<Relationships xmlns="{ns}/package/2006/relationships">'
+                   f'<Relationship Id="rId1" Type="{ns}/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
+        z.writestr("xl/workbook.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                   f'<workbook xmlns="{ns}/spreadsheetml/2006/main" xmlns:r="{ns}/officeDocument/2006/relationships"><sheets>'
+                   + "".join(f'<sheet name="{xml_escape(n)}" sheetId="{i + 1}" r:id="rId{i + 1}"/>' for i, n in enumerate(names))
+                   + "</sheets></workbook>")
+        z.writestr("xl/_rels/workbook.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                   f'<Relationships xmlns="{ns}/package/2006/relationships">'
+                   + "".join(f'<Relationship Id="rId{i + 1}" Type="{ns}/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i + 1}.xml"/>'
+                             for i in range(len(sheets)))
+                   + f'<Relationship Id="rId{len(sheets) + 1}" Type="{ns}/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>')
+        z.writestr("xl/styles.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                   f'<styleSheet xmlns="{ns}/spreadsheetml/2006/main">'
+                   '<fonts count="2"><font><sz val="11"/><name val="Tahoma"/></font><font><b/><sz val="11"/><name val="Tahoma"/></font></fonts>'
+                   '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+                   '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+                   '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+                   '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+                   '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>')
+        for i, (_, data) in enumerate(sheets):
+            z.writestr(f"xl/worksheets/sheet{i + 1}.xml", sheet_xml(data))
+    return buf.getvalue()
+
+
+def analytics_export(ctx, body, query):
+    """ข้อมูลเดียวกับหน้า Dashboard แยกเป็นชีต"""
+    a = analytics(ctx, body, query)
+    t = a["totals"]
+    hours = lambda h: round(h, 1) if h is not None else "-"
+    sheets = [
+        ("สรุป", [["หัวข้อ", "ค่า"],
+                  ["ช่วงข้อมูล", f"{th_date(a['from'])} – {th_date(a['to'])} ({len(a['weeks'])} สัปดาห์)"],
+                  ["ส่งออกเมื่อ", th_date(now(), True)],
+                  ["ใบเบิกทั้งหมด", t["requisitions"]],
+                  ["เบิกฉุกเฉิน", t["emergency"]],
+                  ["รายการที่อนุมัติเบิก", t["lines_approved"]],
+                  ["เวลาเฉลี่ยจนได้รับของ (ชั่วโมง)", hours(t["avg_hours"])],
+                  ["เวลาเฉลี่ยจนได้รับของ ฉุกเฉิน (ชั่วโมง)", hours(t["avg_hours_emergency"])]]),
+        ("การเบิกรายสัปดาห์", [["สัปดาห์เริ่มวันที่", "ฉุกเฉิน", "ตามรอบปกติ", "รวม"]]
+         + [[th_date(w["start"]), w["emergency"], w["routine"], w["emergency"] + w["routine"]] for w in a["weeks"]]),
+        ("การใช้สินค้าตามคลัง", [["คลัง", "รายการที่อนุมัติเบิก"]] + [[w["name"], w["lines"]] for w in a["by_warehouse"]]),
+        ("หน่วยงานที่เบิกมากที่สุด", [["หน่วยงาน", "ใบเบิกทั้งหมด", "เบิกฉุกเฉิน"]]
+         + [[d["name"], d["total"], d["emergency"]] for d in a["by_department"]]),
+        ("สินค้าที่เบิกมากที่สุด", [["ลำดับ", "รายการ", "คลัง", "จำนวนที่อนุมัติ", "หน่วย"]]
+         + [[i + 1, it["name"], it["warehouse_name"], it["qty"], it["unit"]] for i, it in enumerate(a["top_items"])]),
+    ]
+    if ctx.admin:
+        waiting = summary(ctx, body, query)["waiting"]
+        sheets += [
+            ("ใบเบิกที่ต้องดำเนินการ", [["เลขที่", "วันที่ส่ง", "หน่วยงาน", "ผู้เบิก", "ประเภท", "สถานะ"]]
+             + [[r["doc_no"], th_date(r["created_at"], True), r["department_name"], r["requester_name"],
+                 REQ_TYPE_TH.get(r["req_type"], ""), STATUS[r["status"]]] for r in waiting]),
+            ("สินค้าที่ไม่มีการเบิก 30 วัน", [["รหัส", "รายการ", "คลัง", "คงเหลือ", "หน่วย", "เบิกล่าสุด"]]
+             + [[i["code"], i["name"], i["warehouse_name"], i["qty"], i["unit"],
+                 th_date(i["last_requested"]) if i["last_requested"] else "ไม่เคยเบิก"] for i in a["idle_items"]]),
+        ]
+    d = datetime.now()
+    return FileResult(build_xlsx(sheets), XLSX_MIME, f"Dashboard_{d:%d-%m}-{d.year + 543}.xlsx", "attachment")
+
+
 # ---------- เส้นทาง API ----------
 
 ROUTES = []
@@ -1317,6 +1436,7 @@ route("POST", f"/requisitions/{ID}/reject", reject_requisition)
 route("POST", f"/requisitions/{ID}/issue", issue_requisition)
 route("GET", "/summary", summary)
 route("GET", "/analytics", analytics)
+route("GET", "/analytics/export", analytics_export)
 
 STATIC_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -1462,7 +1582,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", f.content_type)
         self.send_header("Content-Length", str(len(f.data)))
-        self.send_header("Content-Disposition", f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(f.filename)}")
+        self.send_header("Content-Disposition", f"{f.disposition}; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(f.filename)}")
         self.send_header("Cache-Control", "private, no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")

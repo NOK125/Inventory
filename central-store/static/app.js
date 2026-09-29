@@ -1549,7 +1549,11 @@ async function analyticsView() {
   const maxD = Math.max(1, ...a.by_department.map((d) => d.total));
   const pctE = t.requisitions ? Math.round((t.emergency / t.requisitions) * 100) : 0;
   const kpi = (label, value, sub, cls = "") => `<div class="kpi"><span>${label}</span><b class="${cls}">${value}</b><small>${sub}</small></div>`;
-  view.innerHTML = `${pageHead("Dashboard วิเคราะห์การเบิก", { over: `ข้อมูล ${a.weeks.length} สัปดาห์ล่าสุด · ${when(a.from, false)} – ${when(a.to, false)}` })}
+  view.innerHTML = `${pageHead("Dashboard วิเคราะห์การเบิก", {
+      over: `ข้อมูล ${a.weeks.length} สัปดาห์ล่าสุด · ${when(a.from, false)} – ${when(a.to, false)}`,
+      right: `<div class="head-btns"><button type="button" class="btn outline" data-act="pdf"><span class="tag">PDF</span>ดาวน์โหลด PDF</button>
+        <a class="btn outline" href="/api/analytics/export" download><span class="tag">XLSX</span>ดาวน์โหลด Excel</a></div>`,
+    })}
     <div class="kpis">
       ${kpi("ใบเบิกทั้งหมด", num(t.requisitions), `เฉลี่ย ${num(Math.round(t.requisitions / Math.max(1, a.weeks.length)))} ใบ/สัปดาห์`)}
       ${kpi("เบิกฉุกเฉิน", num(t.emergency), `${pctE}% ของใบเบิกทั้งหมด`, "tone-bad")}
@@ -1596,7 +1600,40 @@ async function analyticsView() {
           [`${num(i.qty)} ${esc(i.unit)}`, "num"], i.last_requested ? when(i.last_requested, false) : `<small>ไม่เคยเบิก</small>`]),
           "ทุกรายการมีการเบิกใน 30 วันที่ผ่านมา")}</div></section>
     </div>` : ""}`;
-  bind({ go: (tab) => show(tab) });
+  bind({ go: (tab) => show(tab), pdf: () => printDashboard(a, s, dur) });
+}
+
+// PDF ของ Dashboard: ข้อมูลเดียวกับหน้าจอ จัดเป็นตาราง A4 ขาวดำ แล้วให้ผู้ใช้เลือก "บันทึกเป็น PDF"
+function printDashboard(a, s, dur) {
+  const t = a.totals;
+  const sec = (title, headers, rows, empty = "ไม่มีข้อมูล") => `<h2>${title}</h2>${rows.length
+    ? `<table><thead><tr>${headers.map((h) => `<th class="${Array.isArray(h) ? h[1] : ""}">${Array.isArray(h) ? h[0] : h}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td class="${Array.isArray(headers[i]) ? headers[i][1] : ""}">${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`
+    : `<p>${empty}</p>`}`;
+  $("#print").innerHTML = `<h1>รายงานวิเคราะห์การเบิก</h1>
+    <p class="center">งานบริหารเวชภัณฑ์ (คลังกลาง) โรงพยาบาลตาพระยา<br>
+      ข้อมูล ${a.weeks.length} สัปดาห์ล่าสุด ${when(a.from, false)} – ${when(a.to, false)} · พิมพ์เมื่อ ${when(nowTs())}</p>
+    ${sec("สรุป", ["หัวข้อ", ["ค่า", "num"]], [
+      ["ใบเบิกทั้งหมด", num(t.requisitions)], ["เบิกฉุกเฉิน", num(t.emergency)], ["รายการที่อนุมัติเบิก", num(t.lines_approved)],
+      ["เวลาเฉลี่ยจนได้รับของ", dur(t.avg_hours)], ["เวลาเฉลี่ยจนได้รับของ (ฉุกเฉิน)", dur(t.avg_hours_emergency)]])}
+    ${sec("การเบิกรายสัปดาห์", ["สัปดาห์เริ่มวันที่", ["ฉุกเฉิน", "num"], ["ตามรอบปกติ", "num"], ["รวม", "num"]],
+      a.weeks.map((w) => [when(w.start, false), num(w.emergency), num(w.routine), num(w.emergency + w.routine)]))}
+    ${sec("สถิติการใช้สินค้าตามประเภทคลัง (จำนวนรายการที่อนุมัติเบิก)", ["คลัง", ["รายการ", "num"]],
+      a.by_warehouse.map((w) => [esc(w.name), num(w.lines)]))}
+    ${sec("หน่วยงานที่เบิกมากที่สุด", ["หน่วยงาน", ["ใบเบิกทั้งหมด", "num"], ["ฉุกเฉิน", "num"]],
+      a.by_department.map((d) => [esc(d.name), num(d.total), num(d.emergency)]))}
+    ${sec("สินค้าที่เบิกมากที่สุด (รวมจำนวนที่อนุมัติ)", [["ลำดับ", "num"], "รายการ", "คลัง", ["จำนวน", "num"]],
+      a.top_items.map((it, i) => [i + 1, esc(it.name), esc(it.warehouse_name), `${num(it.qty)} ${esc(it.unit)}`]))}
+    ${s ? sec("ใบเบิกที่ต้องดำเนินการ", ["เลขที่", "วันที่ส่ง", "หน่วยงาน", "ประเภท", "สถานะ"],
+      s.waiting.map((r) => [esc(r.doc_no), when(r.created_at), esc(r.department_name), esc(REQ_TYPE[r.req_type]?.[0] || "-"), esc(STATUS[r.status][0])]),
+      "ไม่มีใบเบิกค้าง") : ""}
+    ${s ? sec(`สินค้าที่ไม่มีการเบิก ย้อนหลัง 30 วัน (${num(a.idle_items.length)} รายการ)`, ["รายการ", "คลัง", ["คงเหลือ", "num"], "เบิกล่าสุด"],
+      a.idle_items.map((i) => [esc(i.name), esc(i.warehouse_name), `${num(i.qty)} ${esc(i.unit)}`, i.last_requested ? when(i.last_requested, false) : "ไม่เคยเบิก"]),
+      "ทุกรายการมีการเบิกใน 30 วันที่ผ่านมา") : ""}`;
+  const title = document.title;
+  document.title = `Dashboard_${fileDate(nowTs().slice(0, 10))}`;
+  window.print();
+  document.title = title;
 }
 
 // ---------- แนวทางปฏิบัติ: ประกาศและไฟล์ PDF จากคลังกลาง (ทุกคนอ่านได้ ผู้ดูแลเพิ่ม/ลบ) ----------
