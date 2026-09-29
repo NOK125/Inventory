@@ -391,6 +391,13 @@ input:disabled { background: var(--chip); color: var(--muted); }
 .board-foot .foot-hint { font-size: 13px; color: var(--muted); }
 .head-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .idle-scroll { max-height: 420px; overflow: auto; }
+.guide-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+.guide-head h2 { font-size: 17px; margin-right: auto; }
+.guide-head small { font-size: 12.5px; }
+.guide-body { white-space: pre-wrap; margin: 10px 0 0; line-height: 1.6; }
+.guide-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.guide-actions a.btn { gap: 8px; max-width: 100%; text-decoration: none; }
+.guide-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person-edit { margin-top: 12px; }
 .person-edit h3 { grid-column: 1 / -1; margin: 0; font-size: 14px; }
 .doc-col b { font-size: 13.5px; line-height: 1.25; }

@@ -23,7 +23,7 @@ import zipfile
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -38,6 +38,7 @@ MAX_FAILED_LOGINS = 5
 LOCK_MINUTES = 15
 PBKDF2_ROUNDS = 200_000
 MAX_BODY = 12 * 1024 * 1024  # ไฟล์ Excel นำเข้าสินค้า (ส่งแบบ base64)
+GUIDE_MAX_MB = 8  # ไฟล์ PDF แนวทางปฏิบัติ (base64 ใหญ่ขึ้น 4/3 ยังไม่เกิน MAX_BODY)
 MAX_IMPORT_ROWS = 5000
 
 SCHEMA = """
@@ -132,6 +133,16 @@ CREATE TABLE IF NOT EXISTS movements (
     reason TEXT,
     requisition_id INTEGER REFERENCES requisitions(id),
     user_id INTEGER REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS guidelines (
+    id INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    body TEXT,
+    file_name TEXT,
+    file_size INTEGER,
+    file_data BLOB,
+    created_at TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_req_dept ON requisitions(department_id, status);
 CREATE INDEX IF NOT EXISTS idx_req_created ON requisitions(created_at);
@@ -1080,6 +1091,61 @@ def set_requisition_people(ctx, body, query, req_id):
     return get_req(ctx, req_id)
 
 
+# ---------- แนวทางปฏิบัติ: ประกาศพร้อมไฟล์ PDF (เก็บในฐานข้อมูล จึงถูกสำรองไปพร้อมกัน) ----------
+
+class FileResult:
+    """ผลลัพธ์ของ handler ที่ต้องส่งเป็นไฟล์แทน JSON"""
+    def __init__(self, data, content_type, filename):
+        self.data, self.content_type, self.filename = data, content_type, filename
+
+
+GUIDE_SQL = """SELECT g.id, g.title, g.body, g.file_name, g.file_size, g.created_at, u.full_name AS created_by_name
+               FROM guidelines g LEFT JOIN users u ON u.id = g.created_by"""
+
+
+def list_guidelines(ctx, body, query):
+    return rows(ctx.conn.execute(GUIDE_SQL + " ORDER BY g.created_at DESC, g.id DESC"))
+
+
+def create_guideline(ctx, body, query):
+    ctx.require_admin()
+    title = text(body.get("title"), "หัวข้อ", True)
+    detail = text(body.get("body"), "รายละเอียด")
+    data = name = None
+    if body.get("file_data"):
+        try:
+            data = base64.b64decode(str(body["file_data"]), validate=True)
+        except ValueError:
+            raise ApiError(400, "อ่านไฟล์ไม่ได้ ลองเลือกไฟล์ใหม่")
+        if not data.startswith(b"%PDF-"):
+            raise ApiError(400, "รองรับเฉพาะไฟล์ PDF")
+        if len(data) > GUIDE_MAX_MB * 1024 * 1024:
+            raise ApiError(413, f"ไฟล์ใหญ่เกิน {GUIDE_MAX_MB} MB")
+        name = (text(body.get("file_name"), "ชื่อไฟล์") or "เอกสาร.pdf").replace("/", "_").replace("\\", "_")[:200]
+        if not name.lower().endswith(".pdf"):
+            name += ".pdf"
+    if not detail and data is None:
+        raise ApiError(400, "กรุณาใส่รายละเอียดหรือแนบไฟล์ PDF อย่างน้อยหนึ่งอย่าง")
+    gid = ctx.conn.execute("""INSERT INTO guidelines (title, body, file_name, file_size, file_data, created_at, created_by)
+                              VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                           (title, detail, name, len(data) if data else None, data, now(), ctx.user["id"])).lastrowid
+    return one(ctx.conn, GUIDE_SQL + " WHERE g.id = ?", (gid,))
+
+
+def delete_guideline(ctx, body, query, gid):
+    ctx.require_admin()
+    if not ctx.conn.execute("DELETE FROM guidelines WHERE id = ?", (gid,)).rowcount:
+        raise ApiError(404, "ไม่พบประกาศนี้")
+    return {"ok": True}
+
+
+def guideline_file(ctx, body, query, gid):
+    g = one(ctx.conn, "SELECT file_name, file_data FROM guidelines WHERE id = ?", (gid,))
+    if not g or g["file_data"] is None:
+        raise ApiError(404, "ไม่พบไฟล์")
+    return FileResult(bytes(g["file_data"]), "application/pdf", g["file_name"])
+
+
 def unapprove_requisition(ctx, body, query, req_id):
     ctx.require_admin()
     require_status(get_req(ctx, req_id), "approved")
@@ -1243,6 +1309,10 @@ route("POST", f"/requisitions/{ID}/approve", approve_requisition)
 route("POST", f"/requisitions/{ID}/unapprove", unapprove_requisition)
 route("POST", f"/requisitions/{ID}/names", set_requisition_names)
 route("POST", f"/requisitions/{ID}/people", set_requisition_people)
+route("GET", "/guidelines", list_guidelines)
+route("POST", "/guidelines", create_guideline)
+route("DELETE", f"/guidelines/{ID}", delete_guideline)
+route("GET", f"/guidelines/{ID}/file", guideline_file)
 route("POST", f"/requisitions/{ID}/reject", reject_requisition)
 route("POST", f"/requisitions/{ID}/issue", issue_requisition)
 route("GET", "/summary", summary)
@@ -1334,6 +1404,8 @@ class Handler(BaseHTTPRequestHandler):
                 conn.execute("BEGIN IMMEDIATE" if method != "GET" else "BEGIN")
                 result = handler(ctx, body, parse_qs(url.query), *args)
                 conn.execute("COMMIT")
+                if isinstance(result, FileResult):
+                    return self.send_file(result)
                 return self.send_json(200, result, ctx.cookie)
             raise ApiError(404, "ไม่พบ API นี้")
         except ApiError as err:
@@ -1383,6 +1455,19 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Set-Cookie", cookie)
         self.end_headers()
         self.wfile.write(data)
+
+    def send_file(self, f):
+        # เปิดในแท็บใหม่ด้วยตัวอ่าน PDF ของเบราว์เซอร์ (ไม่ใส่ CSP ของหน้าเว็บ เพราะบางเบราว์เซอร์จะแสดง PDF ไม่ได้)
+        ascii_name = re.sub(r"[^A-Za-z0-9._-]", "_", f.filename) if f.filename.isascii() else "document.pdf"
+        self.send_response(200)
+        self.send_header("Content-Type", f.content_type)
+        self.send_header("Content-Length", str(len(f.data)))
+        self.send_header("Content-Disposition", f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(f.filename)}")
+        self.send_header("Cache-Control", "private, no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.end_headers()
+        self.wfile.write(f.data)
 
     def serve_static(self, path):
         target = (STATIC_DIR / (path.lstrip("/") or "index.html")).resolve()

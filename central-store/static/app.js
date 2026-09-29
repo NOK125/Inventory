@@ -1599,6 +1599,67 @@ async function analyticsView() {
   bind({ go: (tab) => show(tab) });
 }
 
+// ---------- แนวทางปฏิบัติ: ประกาศและไฟล์ PDF จากคลังกลาง (ทุกคนอ่านได้ ผู้ดูแลเพิ่ม/ลบ) ----------
+
+const GUIDE_MAX_MB = 8; // ตรงกับ GUIDE_MAX_MB ใน server.py
+const fileSize = (b) => (b >= 1048576 ? `${num(Math.round(b / 104857.6) / 10)} MB` : `${num(Math.max(1, Math.round(b / 1024)))} KB`);
+const fileBase64 = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+  reader.onerror = () => reject(new Error("อ่านไฟล์ไม่ได้ ลองเลือกไฟล์ใหม่"));
+  reader.readAsDataURL(file);
+});
+
+async function guidelinesView() {
+  const admin = me.role === "admin";
+  const list = await api("GET", "/guidelines");
+  view.innerHTML = `${pageHead("แนวทางปฏิบัติ", {
+      sub: "ประกาศ ขั้นตอน และเอกสารจากงานบริหารเวชภัณฑ์ (คลังกลาง)",
+      right: admin ? `<button type="button" class="btn primary" data-act="add">+ เพิ่มประกาศ</button>` : "",
+    })}
+    <div class="stack">${list.length ? list.map((g) => `<article class="panel pad guide">
+        <div class="guide-head"><h2>${esc(g.title)}</h2>
+          <small>ประกาศ ${when(g.created_at)}${g.created_by_name ? ` · ${esc(g.created_by_name)}` : ""}</small></div>
+        ${g.body ? `<p class="guide-body">${esc(g.body)}</p>` : ""}
+        <div class="guide-actions">
+          ${g.file_name ? `<a class="btn outline" href="/api/guidelines/${g.id}/file" target="_blank" rel="noopener">
+            <span class="tag">PDF</span><span class="guide-file">${esc(g.file_name)}</span><small>${fileSize(g.file_size)}</small></a>` : ""}
+          ${admin ? `<button type="button" class="btn small danger" data-act="del" data-id="${g.id}">ลบประกาศ</button>` : ""}
+        </div></article>`).join("") : `<p class="empty panel">ยังไม่มีประกาศ${admin ? ` กด "+ เพิ่มประกาศ" เพื่อเริ่ม` : ""}</p>`}</div>`;
+  bind({
+    add: () => addGuideline(),
+    del: async (id) => {
+      const g = list.find((x) => String(x.id) === String(id));
+      if (!confirm(`ลบประกาศ "${g.title}"?${g.file_name ? " ไฟล์ PDF จะถูกลบด้วย" : ""}`)) return;
+      try { await api("DELETE", `/guidelines/${id}`); toast("ลบประกาศแล้ว"); await guidelinesView(); }
+      catch (e) { toast(e.message, true); }
+    },
+  });
+}
+
+function addGuideline() {
+  dlg.className = "";
+  dlg.innerHTML = dialogShell("เพิ่มประกาศแนวทางปฏิบัติ", `<div class="fields">
+      ${fieldHtml({ name: "title", label: "หัวข้อ", required: true, placeholder: "เช่น ขั้นตอนการเบิกยาฉุกเฉินนอกเวลาราชการ" })}
+      <label class="field"><span>รายละเอียด</span><textarea name="body" rows="5" placeholder="ไม่บังคับ ถ้าแนบไฟล์ PDF แล้ว"></textarea></label>
+      <label class="field"><span>ไฟล์ PDF</span><input type="file" name="file" accept="application/pdf,.pdf">
+        <small>ไม่บังคับ · ไม่เกิน ${GUIDE_MAX_MB} MB · ต้องมีรายละเอียดหรือไฟล์อย่างน้อยหนึ่งอย่าง</small></label>
+    </div>`, "ประกาศ");
+  wireDialog(async (d, form) => {
+    const file = form.elements.file.files[0];
+    const payload = { title: d.title, body: d.body };
+    if (file) {
+      if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") throw new Error("รองรับเฉพาะไฟล์ PDF");
+      if (file.size > GUIDE_MAX_MB * 1024 * 1024) throw new Error(`ไฟล์ใหญ่เกิน ${GUIDE_MAX_MB} MB`);
+      payload.file_name = file.name;
+      payload.file_data = await fileBase64(file);
+    }
+    await api("POST", "/guidelines", payload);
+    toast("ประกาศแล้ว");
+    refresh();
+  });
+}
+
 // ---------- เข้าสู่ระบบ: เลขบัตรประชาชน 13 หลัก + รหัสผ่าน (ครั้งแรกคือ 5 ตัวท้าย แล้วต้องตั้งใหม่) ----------
 
 function authScreen(setupMode) {
@@ -1696,12 +1757,15 @@ const VIEWS = {
   departments: ["ทะเบียนหน่วยเบิกในรพ.", departmentsView],
   users: ["บัญชีผู้ใช้", usersView, "admin"],
   analytics: ["Dashboard", analyticsView],
+  guidelines: ["แนวทางปฏิบัติ", guidelinesView],
 };
 // [หน้า, หัวข้อกลุ่มในแถบซ้าย]
 const NAV = {
-  dept: [["request"], ["requisitions"], ["regRequester", "ทะเบียน"], ["regReceiver"], ["departments"], ["analytics", "รายงาน"]],
+  dept: [["request"], ["requisitions"], ["regRequester", "ทะเบียน"], ["regReceiver"], ["departments"], ["analytics", "รายงาน"],
+    ["guidelines", "ประกาศ"]],
   admin: [["approve"], ["requisitions"], ["request"], ["items", "คลังสินค้า"], ["movements"],
-    ["regRequester", "ทะเบียน"], ["regReceiver"], ["regCentral"], ["departments"], ["users"], ["analytics", "รายงาน"]],
+    ["regRequester", "ทะเบียน"], ["regReceiver"], ["regCentral"], ["departments"], ["users"], ["analytics", "รายงาน"],
+    ["guidelines", "ประกาศ"]],
 };
 const allowed = (key) => !VIEWS[key][2] || me?.role === VIEWS[key][2];
 const navLabel = (key) => (typeof VIEWS[key][0] === "function" ? VIEWS[key][0]() : VIEWS[key][0]);
