@@ -39,6 +39,7 @@
   --side-head: #7fb3ad;
   --side-active: #1a5a55;
   --accent: #2dd4bf;
+  --logo-plate: #ffffff; /* พื้นหลังโลโก้ ใช้สีเดียวทั้งโหมดสว่าง/มืด เพื่อให้สีโลโก้คงเดิม */
   --dark: #1b2629;
   --shadow: 0 8px 24px #0f2a2a1a;
   --wh-l: 0.94; --wh-c: 0.04; --wh-ink-l: 0.42; --wh-ink-c: 0.1; --bar-l: 0.55;
@@ -109,8 +110,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   display: flex; flex-direction: column; gap: 4px;
   padding: 18px 12px; background: var(--side-bg); color: var(--side-fg);
 }
-.side-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
-.logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); flex: none; }
+.side-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 0 8px 18px; }
+.logo { display: block; height: 44px; width: auto; max-width: 100%; padding: 5px 10px; border-radius: 10px; background: var(--logo-plate); flex: none; }
 .brand-text { display: grid; line-height: 1.2; }
 .brand-text b { font-size: 14.5px; color: #fff; }
 .brand-text small { font-size: 11.5px; color: var(--side-muted); }
@@ -514,7 +515,7 @@ body.auth .side { display: none; }
 body.auth main { padding: 0; }
 .login { display: grid; grid-template-columns: minmax(360px, 520px) minmax(0, 1fr); min-height: 100vh; }
 .login-brand { background: var(--side-bg); color: var(--side-fg); padding: 48px; display: flex; flex-direction: column; gap: 18px; }
-.login-brand .logo { width: 44px; height: 44px; border-radius: 11px; }
+.login-brand .logo { align-self: flex-start; height: 84px; padding: 10px 16px; border-radius: 14px; }
 .login-copy { margin-top: auto; display: grid; gap: 10px; }
 .login-copy small { font-size: 15px; color: var(--side-muted); font-weight: 500; }
 .login-copy h1 { font-size: 40px; line-height: 1.2; color: #fff; }
@@ -554,7 +555,8 @@ body.auth main { padding: 0; }
 @media (max-width: 900px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
   .side { position: static; height: auto; padding: 10px 12px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
-  .side-brand { padding: 0; margin-right: auto; }
+  .side-brand { padding: 0; margin-right: auto; flex-direction: row; align-items: center; }
+  .side-brand .logo { height: 36px; padding: 4px 8px; border-radius: 8px; }
   #userbox { order: 2; margin: 0; padding: 0; border: 0; grid-template-columns: auto auto auto; align-items: center; gap: 0 8px; }
   #userbox small { grid-column: 1; }
   #userbox button, #userbox button + button { grid-row: 1 / span 2; margin: 0; padding: 5px 10px; }
@@ -566,6 +568,7 @@ body.auth main { padding: 0; }
   main { padding: 18px 16px 48px; }
   .login { grid-template-columns: minmax(0, 1fr); }
   .login-brand { padding: 24px 20px; }
+  .login-brand .logo { height: 60px; padding: 8px 12px; }
   .login-copy { margin-top: 0; }
   .login-copy h1 { font-size: 28px; }
   .matrix-wrap { max-height: none; }

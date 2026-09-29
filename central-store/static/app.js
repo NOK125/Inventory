@@ -1706,7 +1706,7 @@ function authScreen(setupMode) {
   view.onclick = view.onchange = view.oninput = view.onkeydown = null;
   view.innerHTML = `<div class="login">
     <div class="login-brand">
-      <div class="logo"></div>
+      <img class="logo" src="logo.png" alt="โรงพยาบาลตาพระยา">
       <div class="login-copy">
         <small>โรงพยาบาลตาพระยา</small>
         <h1>งานบริหารเวชภัณฑ์<br>(คลังกลาง)</h1>
@@ -1883,7 +1883,7 @@ function passwordScreen(current) {
   $("#userbox").innerHTML = "";
   view.onclick = view.onchange = view.oninput = view.onkeydown = null;
   view.innerHTML = `<div class="login">
-    <div class="login-brand"><div class="logo"></div>
+    <div class="login-brand"><img class="logo" src="logo.png" alt="โรงพยาบาลตาพระยา">
       <div class="login-copy"><small>โรงพยาบาลตาพระยา</small><h1>งานบริหารเวชภัณฑ์<br>(คลังกลาง)</h1>
         <p>เพื่อความปลอดภัยของข้อมูล กรุณาตั้งรหัสผ่านของคุณเองก่อนเริ่มใช้งาน</p></div></div>
     <div class="login-main"><form class="login-form" id="pw-form" novalidate>
