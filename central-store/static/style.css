@@ -298,6 +298,8 @@ input:disabled { background: var(--chip); color: var(--muted); }
 .prod-row.in { background: var(--soft-2); }
 .prod-row .code { font-size: 13px; color: var(--muted); }
 .prod-row .name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prod-row .name small { display: block; font-size: 12.5px; font-weight: 400; }
+.shop-search { padding: 14px 14px 0; }
 .prod-qty { display: flex; justify-content: flex-end; align-items: center; gap: 8px; min-width: 236px; }
 .unit { min-width: 52px; font-size: 13.5px; background: var(--chip); border-radius: 6px; padding: 4px 8px; text-align: center; white-space: nowrap; }
 .stepper { display: flex; align-items: center; border: 1px solid var(--primary); border-radius: 9px; background: var(--surface); overflow: hidden; }

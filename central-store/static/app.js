@@ -380,13 +380,13 @@ const blankForm = () => ({
   req_type: "", note: "", department_id: "", requesterInit: false,
   people: Object.fromEntries(ROLES.map((r) => [r.key, { name: "", position: "" }])),
 });
-const flow = { step: "wh", wh: null, editing: null, done: null, form: blankForm(), adding: null, error: "" };
+const flow = { step: "wh", wh: null, q: "", editing: null, done: null, form: blankForm(), adding: null, error: "" };
 let catalog = [];
 let registry = { people: [], positions: [], departments: [] };
 
 function resetFlow() {
   cart.clear();
-  Object.assign(flow, { step: "wh", wh: null, editing: null, done: null, form: blankForm(), adding: null, error: "" });
+  Object.assign(flow, { step: "wh", wh: null, q: "", editing: null, done: null, form: blankForm(), adding: null, error: "" });
 }
 
 function cartGroups() {
@@ -412,7 +412,10 @@ async function requestView() {
   if (flow.step === "done") flow.step = "wh";
   bind(flowActions);
   view.onchange = flowChange;
-  view.oninput = (e) => { if (e.target.id === "note") flow.form.note = e.target.value; };
+  view.oninput = (e) => {
+    if (e.target.id === "note") flow.form.note = e.target.value;
+    else if (e.target.id === "shop-q") { flow.q = e.target.value; drawShopParts(); }
+  };
   view.onkeydown = (e) => {
     if (e.key !== "Enter") return;
     if (e.target.id === "add-val") { e.preventDefault(); saveAdd(); }
@@ -465,6 +468,8 @@ function drawShop() {
     })}
     <div class="shop">
       <section class="panel">
+        <div class="shop-search"><input type="search" id="shop-q" value="${esc(flow.q)}"
+          placeholder="ค้นหาชื่อหรือรหัสสินค้าจากทุกคลัง" aria-label="ค้นหาสินค้าจากทุกคลัง" autocomplete="off"></div>
         <div class="wh-tabs" id="wh-tabs" role="tablist" aria-label="คลัง"></div>
         <div id="prods"></div>
       </section>
@@ -486,8 +491,15 @@ function drawShopParts() {
     const tabs = $("#wh-tabs");
     const sel = $("[aria-selected=true]", tabs);
     if (sel) tabs.scrollLeft = Math.max(0, sel.offsetLeft - (tabs.clientWidth - sel.offsetWidth) / 2);
-    const list = catalog.filter((i) => i.warehouse_id === w.id);
-    $("#prods").innerHTML = `<div class="shop-head"><b>${esc(w.name)}</b><small>${esc(w.description || "")}</small></div>
+    // มีคำค้น: ค้นจากทุกคลัง ทุกคำต้องตรง (เช่น "tab 50")
+    const words = flow.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const list = words.length
+      ? catalog.filter((i) => { const s = `${i.code} ${i.name}`.toLowerCase(); return words.every((x) => s.includes(x)); })
+      : catalog.filter((i) => i.warehouse_id === w.id);
+    const head = words.length
+      ? `<b>ผลการค้นหา "${esc(flow.q.trim())}"</b><small>จากทุกคลัง · พบ ${list.length} รายการ</small>`
+      : `<b>${esc(w.name)}</b><small>${esc(w.description || "")}</small>`;
+    $("#prods").innerHTML = `<div class="shop-head">${head}</div>
       <div class="prod-row head"><span>รหัส</span><span>รายการ</span><span style="text-align:right">จำนวน · หน่วย</span></div>
       ${list.length ? list.map((i) => {
         const qty = cart.get(i.id) || 0;
@@ -499,9 +511,9 @@ function drawShopParts() {
             </div>`
           : `<button type="button" class="btn outline" data-act="inc" data-id="${i.id}">+ ใส่ตะกร้า</button>`;
         return `<div class="prod-row ${qty ? "in" : ""}"><span class="code">${esc(i.code)}</span>
-          <span class="name" title="${esc(i.name)}">${esc(i.name)}</span>
+          <span class="name" title="${esc(i.name)}">${esc(i.name)}${words.length ? `<small>${esc(whOf(i.warehouse_id)?.name || "")}</small>` : ""}</span>
           <div class="prod-qty">${control}<span class="unit">${esc(i.unit)}</span></div></div>`;
-      }).join("") : `<p class="empty">คลังนี้ยังไม่มีสินค้าที่เปิดให้เบิก</p>`}`;
+      }).join("") : `<p class="empty">${words.length ? "ไม่พบสินค้าที่ค้นหา ลองพิมพ์คำอื่นหรือรหัสสินค้า" : "คลังนี้ยังไม่มีสินค้าที่เปิดให้เบิก"}</p>`}`;
     drawCart();
   });
 }
@@ -795,7 +807,7 @@ async function startEdit(id) {
 }
 
 const flowActions = {
-  wh: (id) => { flow.wh = Number(id); goStep("shop"); },
+  wh: (id) => { flow.wh = Number(id); flow.q = ""; goStep("shop"); },
   whs: () => goStep("wh"),
   shop: () => goStep(flow.wh ? "shop" : "wh"),
   checkout: () => goStep("co"),
