@@ -525,6 +525,14 @@ tr.imp-update td { background: var(--info-soft); }
 .week .bar.e { background: var(--emerg); border-radius: 4px 4px 0 0; }
 .week .bar.n { background: var(--soft-line); }
 .week-labels { display: flex; gap: 10px; padding: 0 4px; margin-top: -6px; }
+.usage-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 22px 0 10px; }
+.usage-head b { font-size: 17px; }
+.usage-head small { font-size: 13px; }
+.weeks.usage { gap: 4px; height: 175px; }
+.week-labels.usage { gap: 4px; }
+.week .bar.u { background: var(--primary); border-radius: 4px 4px 0 0; min-height: 0; }
+.week .u-n { font-size: 11px; font-weight: 700; color: var(--primary); padding-bottom: 2px; }
+.usage-dept { margin-bottom: 14px; }
 .week-labels span { flex: 1; min-width: 0; text-align: center; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
 .hbar { display: grid; grid-template-columns: 130px minmax(0, 1fr) 70px; gap: 10px; align-items: center; font-size: 13.5px; }
 .hbar > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

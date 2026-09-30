@@ -1593,6 +1593,7 @@ async function analyticsView() {
           <span class="qty-u">${num(it.qty)} <small>${esc(it.unit)}</small></span></div>`).join("") : `<p class="empty">ยังไม่มีข้อมูล</p>`}
       </section>
     </div>
+    ${a.usage ? usageSection(a.usage) : ""}
     <div class="charts ${s ? "even" : "single"}">
       ${s ? `<section class="chart"><div class="chart-title"><b>ใบเบิกที่ต้องดำเนินการ</b>
           <button type="button" class="link" data-act="go" data-id="approve">ไปหน้าอนุมัติ →</button></div>
@@ -1605,6 +1606,34 @@ async function analyticsView() {
           "ทุกรายการมีการเบิกใน 30 วันที่ผ่านมา")}</div></section>
     </div>`;
   bind({ go: (tab) => show(tab), pdf: () => printDashboard(a, s, dur) });
+}
+
+// การใช้งานระบบ (เฉพาะผู้ดูแล): ผู้ใช้ตามช่วงเวลาและหน่วยงาน
+const hourLabel = (h) => `${String(h).padStart(2, "0")}.00`;
+function usageSection(u) {
+  const maxH = Math.max(1, ...u.by_hour.map((x) => x.count));
+  const maxD = Math.max(1, ...u.by_day.map((x) => x.users));
+  const bars = (list, val, max, label, tip) => `<div class="weeks usage">${list.map((x) => `<div class="week" title="${tip(x)}">
+      <span class="u-n">${val(x) || ""}</span><div class="bar u" style="height:${Math.round((val(x) / max) * 150)}px"></div></div>`).join("")}</div>
+    <div class="week-labels usage">${list.map((x) => `<span>${label(x)}</span>`).join("")}</div>`;
+  return `<div class="usage-head"><b>การใช้งานระบบ</b>
+      <small>นับผู้ใช้ที่เข้าใช้งานในแต่ละชั่วโมง${u.since ? ` · เริ่มเก็บข้อมูล ${when(u.since + ":00:00", false)}` : ""}</small></div>
+    <div class="kpis">
+      <div class="kpi"><span>ผู้ใช้งานวันนี้</span><b class="tone-brand">${num(u.today)}</b><small>คน</small></div>
+      <div class="kpi"><span>ผู้ใช้งาน 7 วันล่าสุด</span><b>${num(u.d7)}</b><small>คน</small></div>
+      <div class="kpi"><span>ผู้ใช้งาน 30 วันล่าสุด</span><b>${num(u.d30)}</b><small>คน</small></div>
+      <div class="kpi"><span>หน่วยงานที่ใช้งาน</span><b>${num(u.by_department.length)}</b><small>หน่วยงานใน 30 วัน</small></div>
+    </div>
+    <div class="charts even">
+      <section class="chart"><div class="chart-title"><b>ช่วงเวลาที่มีผู้ใช้งาน</b><small>จำนวนผู้ใช้ (คน·วัน) แยกตามชั่วโมง ย้อนหลัง 30 วัน</small></div>
+        ${bars(u.by_hour.filter((x) => x.hour >= 6 && x.hour <= 20 || x.count), (x) => x.count, maxH, (x) => String(x.hour).padStart(2, "0"),
+          (x) => `${hourLabel(x.hour)}–${String(x.hour).padStart(2, "0")}.59 น.: ${x.count} คน·วัน`)}</section>
+      <section class="chart"><div class="chart-title"><b>ผู้ใช้งานรายวัน</b><small>จำนวนผู้ใช้ต่อวัน 14 วันล่าสุด</small></div>
+        ${bars(u.by_day, (x) => x.users, maxD, (x) => when(x.day, false).slice(0, 5), (x) => `${when(x.day, false)}: ${x.users} คน`)}</section>
+    </div>
+    <section class="chart usage-dept"><div class="chart-title"><b>การใช้งานตามหน่วยงาน</b><small>ย้อนหลัง 30 วัน</small></div>
+      ${table(["หน่วยงาน", ["ผู้ใช้งาน (คน)", "num"], ["ชั่วโมงที่ใช้งาน", "num"], "ใช้งานล่าสุด"],
+        u.by_department.map((x) => [esc(x.name), [num(x.users), "num"], [num(x.hours), "num"], when(x.last_hour + ":00:00")]), "ยังไม่มีข้อมูลการใช้งาน")}</section>`;
 }
 
 // PDF ของ Dashboard: ข้อมูลเดียวกับหน้าจอ จัดเป็นตาราง A4 ขาวดำ แล้วให้ผู้ใช้เลือก "บันทึกเป็น PDF"
@@ -1633,7 +1662,12 @@ function printDashboard(a, s, dur) {
       "ไม่มีใบเบิกค้าง") : ""}
     ${sec(`สินค้าที่ไม่มีการเบิก ย้อนหลัง 30 วัน (${num(a.idle_items.length)} รายการ)`, ["รายการ", "คลัง", "เบิกล่าสุด"],
       a.idle_items.map((i) => [esc(i.name), esc(i.warehouse_name), i.last_requested ? when(i.last_requested, false) : "ไม่เคยเบิก"]),
-      "ทุกรายการมีการเบิกใน 30 วันที่ผ่านมา")}`;
+      "ทุกรายการมีการเบิกใน 30 วันที่ผ่านมา")}
+    ${a.usage ? sec(`การใช้งานระบบ (ผู้ใช้วันนี้ ${num(a.usage.today)} · 7 วัน ${num(a.usage.d7)} · 30 วัน ${num(a.usage.d30)} คน)`,
+      ["ช่วงเวลา", ["ผู้ใช้งาน (คน·วัน) 30 วัน", "num"]],
+      a.usage.by_hour.filter((x) => x.count).map((x) => [`${hourLabel(x.hour)}–${String(x.hour).padStart(2, "0")}.59 น.`, num(x.count)]), "ยังไม่มีข้อมูล") : ""}
+    ${a.usage ? sec("การใช้งานตามหน่วยงาน (30 วัน)", ["หน่วยงาน", ["ผู้ใช้งาน (คน)", "num"], ["ชั่วโมงที่ใช้งาน", "num"], "ใช้งานล่าสุด"],
+      a.usage.by_department.map((x) => [esc(x.name), num(x.users), num(x.hours), when(x.last_hour + ":00:00")]), "ยังไม่มีข้อมูล") : ""}`;
   const title = document.title;
   document.title = `Dashboard_${fileDate(nowTs().slice(0, 10))}`;
   window.print();

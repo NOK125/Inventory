@@ -173,6 +173,13 @@ CREATE TABLE IF NOT EXISTS issues (
     replied_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_issues_dept ON issues(department_id, created_at);
+-- การใช้งานระบบ: ผู้ใช้ 1 คนนับ 1 แถวต่อชั่วโมงที่มีการใช้งาน (hour = YYYY-MM-DDTHH)
+CREATE TABLE IF NOT EXISTS user_activity (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hour TEXT NOT NULL,
+    PRIMARY KEY (user_id, hour)
+);
+CREATE INDEX IF NOT EXISTS idx_activity_hour ON user_activity(hour);
 """
 
 DEFAULT_WAREHOUSES = [
@@ -250,6 +257,13 @@ def init_db():
             conn.executemany("INSERT INTO positions (name, scope) VALUES (?, ?)",
                              [(n, s) for s, names in DEFAULT_POSITIONS.items() for n in names])
         conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now(),))
+        # การใช้งานระบบ: ลบข้อมูลเก่ากว่า 1 ปี และถ้ายังไม่มีข้อมูลเลย ตั้งต้นจากผู้ที่ล็อกอินค้างอยู่
+        conn.execute("DELETE FROM user_activity WHERE hour < ?",
+                     ((datetime.now() - timedelta(days=ACTIVITY_KEEP_DAYS)).strftime("%Y-%m-%dT%H"),))
+        if not conn.execute("SELECT 1 FROM user_activity LIMIT 1").fetchone():
+            for user_id, expires in conn.execute("SELECT user_id, expires_at FROM sessions").fetchall():
+                start = datetime.fromisoformat(expires) - timedelta(hours=SESSION_HOURS)
+                conn.execute("INSERT OR IGNORE INTO user_activity (user_id, hour) VALUES (?, ?)", (user_id, start.strftime("%Y-%m-%dT%H")))
     finally:
         conn.close()
 
@@ -356,6 +370,22 @@ def public_user(conn, u):
     return {"id": u["id"], "username": u["username"], "full_name": u["full_name"], "role": u["role"],
             "department_id": u["department_id"], "active": u["active"], "must_change_password": u["must_change_password"],
             "department_name": d["name"] if d else None, "department_code": d["code"] if d else None}
+
+
+ACTIVITY_KEEP_DAYS = 365
+_activity_seen = set()  # (user_id, hour) ที่บันทึกแล้วในชั่วโมงนี้ กันเขียนฐานข้อมูลทุกคำขอ
+
+
+def record_activity(conn, user_id):
+    """นับผู้ใช้ที่ใช้งานในแต่ละชั่วโมง (สำหรับ Dashboard การใช้งานระบบ)"""
+    hour = datetime.now().strftime("%Y-%m-%dT%H")
+    key = (user_id, hour)
+    if key in _activity_seen:
+        return
+    if len(_activity_seen) > 5000 or any(h != hour for _, h in list(_activity_seen)[:1]):
+        _activity_seen.clear()
+    conn.execute("INSERT OR IGNORE INTO user_activity (user_id, hour) VALUES (?, ?)", key)
+    _activity_seen.add(key)
 
 
 def start_session(ctx, user):
@@ -1335,6 +1365,30 @@ def summary(ctx, body, query):
     }
 
 
+def usage_stats(conn, end):
+    """การใช้งานระบบ (เฉพาะผู้ดูแล): จำนวนผู้ใช้ตามช่วงเวลาและหน่วยงาน นับจาก user_activity"""
+    h = lambda days: (end - timedelta(days=days)).strftime("%Y-%m-%dT%H")
+    today = end.strftime("%Y-%m-%d")
+    distinct = lambda since: conn.execute("SELECT COUNT(DISTINCT user_id) FROM user_activity WHERE hour >= ?", (since,)).fetchone()[0]
+    by_hour = dict(conn.execute("""SELECT CAST(substr(hour, 12, 2) AS INTEGER), COUNT(*) FROM user_activity
+                                   WHERE hour >= ? GROUP BY 1""", (h(30),)).fetchall())
+    days = [(end - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(13, -1, -1)]
+    per_day = dict(conn.execute("""SELECT substr(hour, 1, 10), COUNT(DISTINCT user_id) FROM user_activity
+                                   WHERE hour >= ? GROUP BY 1""", (days[0],)).fetchall())
+    by_dept = rows(conn.execute("""
+        SELECT COALESCE(d.name, 'คลังกลาง (ผู้ดูแล)') AS name, COUNT(DISTINCT a.user_id) AS users,
+               COUNT(*) AS hours, MAX(a.hour) AS last_hour
+        FROM user_activity a JOIN users u ON u.id = a.user_id LEFT JOIN departments d ON d.id = u.department_id
+        WHERE a.hour >= ? GROUP BY u.department_id ORDER BY users DESC, hours DESC""", (h(30),)))
+    first = conn.execute("SELECT MIN(hour) FROM user_activity").fetchone()[0]
+    return {
+        "today": distinct(today), "d7": distinct(h(7)), "d30": distinct(h(30)), "since": first,
+        "by_hour": [{"hour": i, "count": by_hour.get(i, 0)} for i in range(24)],
+        "by_day": [{"day": d, "users": per_day.get(d, 0)} for d in days],
+        "by_department": by_dept,
+    }
+
+
 def analytics(ctx, body, query):
     weeks_n = 12
     end = datetime.now()
@@ -1385,6 +1439,7 @@ def analytics(ctx, body, query):
 
     done = [r for r in docs if r["issued_at"]]
     return {
+        "usage": usage_stats(ctx.conn, end) if ctx.admin else None,
         "from": start_s, "to": end.isoformat(timespec="seconds"), "weeks": weeks,
         "by_warehouse": by_wh, "by_department": by_dept[:6], "top_items": top,
         "idle_since": idle_since, "idle_items": idle,
@@ -1512,6 +1567,14 @@ def analytics_export(ctx, body, query):
     sheets.append(("สินค้าที่ไม่มีการเบิก 30 วัน", [["รหัส", "รายการ", "คลัง", "หน่วย", "เบิกล่าสุด"]]
                    + [[i["code"], i["name"], i["warehouse_name"], i["unit"],
                        th_date(i["last_requested"]) if i["last_requested"] else "ไม่เคยเบิก"] for i in a["idle_items"]]))
+    if a["usage"]:
+        u = a["usage"]
+        sheets.append(("การใช้งานระบบ", [["หัวข้อ", "จำนวนผู้ใช้"], ["วันนี้", u["today"]], ["7 วันล่าสุด", u["d7"]], ["30 วันล่าสุด", u["d30"]], [],
+                                          ["ช่วงเวลา (30 วัน)", "ผู้ใช้งาน (คน·วัน)"]]
+                       + [[f"{x['hour']:02d}.00–{x['hour']:02d}.59", x["count"]] for x in u["by_hour"]] + [[], ["วันที่", "ผู้ใช้งาน (คน)"]]
+                       + [[th_date(x["day"]), x["users"]] for x in u["by_day"]]))
+        sheets.append(("การใช้งานตามหน่วยงาน", [["หน่วยงาน", "ผู้ใช้งาน (คน)", "ชั่วโมงที่ใช้งาน", "ใช้งานล่าสุด"]]
+                       + [[x["name"], x["users"], x["hours"], th_date(x["last_hour"] + ":00:00", True)] for x in u["by_department"]]))
     d = datetime.now()
     return FileResult(build_xlsx(sheets), XLSX_MIME, f"Dashboard_{d:%d-%m}-{d.year + 543}.xlsx", "attachment")
 
@@ -1666,6 +1729,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(401, "กรุณาเข้าสู่ระบบ")
                 if ctx.user and ctx.user["must_change_password"] and handler not in PUBLIC | BEFORE_PASSWORD_CHANGE:
                     raise ApiError(403, "กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน")
+                if ctx.user:
+                    record_activity(conn, ctx.user["id"])
                 # ล็อกฐานข้อมูลตั้งแต่ต้นสำหรับคำสั่งที่เขียนข้อมูล กันการตัดสต็อกซ้อนกัน
                 conn.execute("BEGIN IMMEDIATE" if method != "GET" else "BEGIN")
                 result = handler(ctx, body, parse_qs(url.query), *args)
