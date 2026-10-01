@@ -1415,11 +1415,13 @@ def analytics(ctx, body, query):
         if mine:
             by_dept.append({"name": d["name"], "total": len(mine), "emergency": sum(1 for r in mine if r["req_type"] == "emergency")})
     by_dept.sort(key=lambda x: -x["total"])
+    # สินค้าที่เบิกมากที่สุด: เรียงตามจำนวนครั้ง (จำนวนใบเบิกที่มีสินค้านั้น) แล้วจึงตามจำนวนรวม
     totals = {}
     for l in approved:
-        t = totals.setdefault(l["item_id"], {"name": l["name"], "unit": l["unit"], "warehouse_name": l["warehouse_name"], "qty": 0})
+        t = totals.setdefault(l["item_id"], {"name": l["name"], "unit": l["unit"], "warehouse_name": l["warehouse_name"], "times": 0, "qty": 0})
+        t["times"] += 1
         t["qty"] += l["qty"]
-    top = sorted(totals.values(), key=lambda x: -x["qty"])[:5]
+    top = sorted(totals.values(), key=lambda x: (-x["times"], -x["qty"]))[:5]
 
     def avg_hours(items):
         hours = [(datetime.fromisoformat(r["issued_at"]) - datetime.fromisoformat(r["created_at"])).total_seconds() / 3600 for r in items]
@@ -1555,8 +1557,8 @@ def analytics_export(ctx, body, query):
         ("การใช้สินค้าตามคลัง", [["คลัง", "รายการที่อนุมัติเบิก"]] + [[w["name"], w["lines"]] for w in a["by_warehouse"]]),
         ("หน่วยงานที่เบิกมากที่สุด", [["หน่วยงาน", "ใบเบิกทั้งหมด", "เบิกฉุกเฉิน"]]
          + [[d["name"], d["total"], d["emergency"]] for d in a["by_department"]]),
-        ("สินค้าที่เบิกมากที่สุด", [["ลำดับ", "รายการ", "คลัง", "จำนวนที่อนุมัติ", "หน่วย"]]
-         + [[i + 1, it["name"], it["warehouse_name"], it["qty"], it["unit"]] for i, it in enumerate(a["top_items"])]),
+        ("สินค้าที่เบิกมากที่สุด", [["ลำดับ", "รายการ", "คลัง", "จำนวนครั้งที่เบิก", "จำนวนที่อนุมัติรวม", "หน่วย"]]
+         + [[i + 1, it["name"], it["warehouse_name"], it["times"], it["qty"], it["unit"]] for i, it in enumerate(a["top_items"])]),
     ]
     if ctx.admin:
         waiting = summary(ctx, body, query)["waiting"]

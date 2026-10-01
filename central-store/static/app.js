@@ -1588,9 +1588,9 @@ async function analyticsView() {
           <span class="v"><b>${num(d.total)}</b> <small>(${num(d.emergency)})</small></span></div>`).join("") : `<p class="empty">ยังไม่มีข้อมูล</p>`}
       </section>
       <section class="chart" style="gap:4px">
-        <div class="chart-title" style="padding-bottom:8px"><b>สินค้าที่เบิกมากที่สุด</b><small>รวมจำนวนที่อนุมัติ</small></div>
-        ${a.top_items.length ? a.top_items.map((it, i) => `<div class="top-row"><b>${i + 1}</b><div><span>${esc(it.name)}</span><small>${esc(it.warehouse_name)}</small></div>
-          <span class="qty-u">${num(it.qty)} <small>${esc(it.unit)}</small></span></div>`).join("") : `<p class="empty">ยังไม่มีข้อมูล</p>`}
+        <div class="chart-title" style="padding-bottom:8px"><b>สินค้าที่เบิกมากที่สุด</b><small>นับจากจำนวนครั้งที่เบิก (ใบที่อนุมัติแล้วและจ่ายแล้ว)</small></div>
+        ${a.top_items.length ? a.top_items.map((it, i) => `<div class="top-row"><b>${i + 1}</b><div><span>${esc(it.name)}</span><small>${esc(it.warehouse_name)} · รวม ${num(it.qty)} ${esc(it.unit)}</small></div>
+          <span class="qty-u">${num(it.times)} <small>ครั้ง</small></span></div>`).join("") : `<p class="empty">ยังไม่มีข้อมูล</p>`}
       </section>
     </div>
     ${a.usage ? usageSection(a.usage) : ""}
@@ -1655,8 +1655,8 @@ function printDashboard(a, s, dur) {
       a.by_warehouse.map((w) => [esc(w.name), num(w.lines)]))}
     ${sec("หน่วยงานที่เบิกมากที่สุด", ["หน่วยงาน", ["ใบเบิกทั้งหมด", "num"], ["ฉุกเฉิน", "num"]],
       a.by_department.map((d) => [esc(d.name), num(d.total), num(d.emergency)]))}
-    ${sec("สินค้าที่เบิกมากที่สุด (รวมจำนวนที่อนุมัติ)", [["ลำดับ", "num"], "รายการ", "คลัง", ["จำนวน", "num"]],
-      a.top_items.map((it, i) => [i + 1, esc(it.name), esc(it.warehouse_name), `${num(it.qty)} ${esc(it.unit)}`]))}
+    ${sec("สินค้าที่เบิกมากที่สุด (นับจากจำนวนครั้งที่เบิก)", [["ลำดับ", "num"], "รายการ", "คลัง", ["จำนวนครั้ง", "num"], ["จำนวนที่อนุมัติรวม", "num"]],
+      a.top_items.map((it, i) => [i + 1, esc(it.name), esc(it.warehouse_name), num(it.times), `${num(it.qty)} ${esc(it.unit)}`]))}
     ${s ? sec("ใบเบิกที่ต้องดำเนินการ", ["เลขที่", "วันที่ส่ง", "หน่วยงาน", "ประเภท", "สถานะ"],
       s.waiting.map((r) => [esc(r.doc_no), when(r.created_at), esc(r.department_name), esc(REQ_TYPE[r.req_type]?.[0] || "-"), esc(STATUS[r.status][0])]),
       "ไม่มีใบเบิกค้าง") : ""}
