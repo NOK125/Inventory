@@ -1995,6 +1995,7 @@ function clearShell() {
 // หน้าแรก: เลือกช่องทางใช้งาน รพ. (ระบบเดิมทั้งหมด) หรือ รพ.สต. (ยังไม่เปิดใช้)
 function portalScreen() {
   clearShell();
+  document.body.classList.remove("phc");
   view.innerHTML = `<div class="login">
     ${loginBrand("งานบริหารเวชภัณฑ์<br>(คลังกลาง)", "เลือกช่องทางการใช้งานของหน่วยงานคุณ")}
     <div class="login-main">
@@ -2028,6 +2029,7 @@ function authScreen(setupMode, system = loginSystem) {
   loginSystem = system;
   const phc = system === "phc";
   clearShell();
+  document.body.classList.toggle("phc", phc);
   view.innerHTML = `<div class="login">
     ${phc ? loginBrand("งานบริหารเวชภัณฑ์<br>สำหรับ รพ.สต.", "สำหรับเจ้าหน้าที่ รพ.สต. ในเครือข่าย และเจ้าหน้าที่คลังกลาง")
       : loginBrand("งานบริหารเวชภัณฑ์<br>(คลังกลาง)", "เบิกยา เวชภัณฑ์ และพัสดุจากคลังกลางให้หน่วยงาน ติดตามสถานะใบเบิกได้ในที่เดียว")}
@@ -2158,6 +2160,7 @@ function refresh() {
 async function startApp(currentPassword = "") {
   phcMode = me.session_system === "phc";
   loginSystem = phcMode ? "phc" : "hospital";
+  document.body.classList.toggle("phc", phcMode);
   if (me.must_change_password) return passwordScreen(currentPassword);
   document.body.classList.remove("auth");
   try { warehouses = await api("GET", "/warehouses"); } catch { warehouses = []; }

@@ -39,6 +39,21 @@
   --side-head: #7fb3ad;
   --side-active: #1a5a55;
   --accent: #2dd4bf;
+  /* ชุดสีน้ำเงินของระบบ รพ.สต. (ใช้ผ่าน body.phc) */
+  --phc-primary: #1d4ed8;
+  --phc-primary-hover: #1e40af;
+  --phc-primary-text: #ffffff;
+  --phc-soft: #e0e9ff;
+  --phc-soft-2: #f3f6ff;
+  --phc-soft-line: #a5bdf5;
+  --phc-disabled: #a3b3d4;
+  --phc-side-bg: #13295c;
+  --phc-side-fg: #dbe5fb;
+  --phc-side-muted: #a5bdf5;
+  --phc-side-link: #bfcff5;
+  --phc-side-head: #8aa5e6;
+  --phc-side-active: #1f3f88;
+  --phc-accent: #60a5fa;
   --logo-plate: #ffffff; /* พื้นหลังโลโก้ ใช้สีเดียวทั้งโหมดสว่าง/มืด เพื่อให้สีโลโก้คงเดิม */
   --dark: #1b2629;
   --shadow: 0 8px 24px #0f2a2a1a;
@@ -83,12 +98,42 @@
     --info-line: #1e3a8a;
     --side-bg: #0b2927;
     --side-active: #17504b;
+    --phc-primary: #60a5fa;
+    --phc-primary-hover: #93c5fd;
+    --phc-primary-text: #0b1b3a;
+    --phc-soft: #1e3a8a80;
+    --phc-soft-2: #1e3a8a40;
+    --phc-soft-line: #2c4f9e;
+    --phc-disabled: #3d4a66;
+    --phc-side-bg: #0c1d42;
+    --phc-side-active: #173470;
     --dark: #e4eced;
     --shadow: 0 8px 24px #0006;
     --wh-l: 0.36; --wh-c: 0.06; --wh-ink-l: 0.88; --wh-ink-c: 0.08; --bar-l: 0.68;
     color-scheme: dark;
   }
 }
+
+/* ระบบ รพ.สต.: โทนสีน้ำเงิน แยกจาก รพ. (สีเขียว) */
+body.phc {
+  --primary: var(--phc-primary);
+  --primary-hover: var(--phc-primary-hover);
+  --primary-text: var(--phc-primary-text);
+  --soft: var(--phc-soft);
+  --soft-2: var(--phc-soft-2);
+  --soft-line: var(--phc-soft-line);
+  --disabled: var(--phc-disabled);
+  --side-bg: var(--phc-side-bg);
+  --side-fg: var(--phc-side-fg);
+  --side-muted: var(--phc-side-muted);
+  --side-link: var(--phc-side-link);
+  --side-head: var(--phc-side-head);
+  --side-active: var(--phc-side-active);
+  --accent: var(--phc-accent);
+}
+/* ปุ่มเลือกช่องทาง รพ.สต. ในหน้าแรกใช้สีน้ำเงินให้เห็นความต่าง */
+.portal[data-portal="phc"] b { color: var(--phc-primary); }
+.portal[data-portal="phc"]:hover, .portal[data-portal="phc"]:focus-visible { border-color: var(--phc-primary); background: var(--phc-soft); }
 
 * { box-sizing: border-box; }
 body {
