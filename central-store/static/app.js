@@ -28,15 +28,16 @@ let unauthorized = () => {};
 // ช่องทาง รพ.สต.: ล็อกอินจริง หน้าตาเหมือนหน่วยงานของ รพ. แต่ยังไม่มีฐานข้อมูล ทุกหน้าว่างและบันทึกไม่ได้
 // (เซิร์ฟเวอร์ก็ปิดกั้นข้อมูลของ รพ. สำหรับเซสชัน รพ.สต. อยู่แล้ว)
 let phcMode = false;
-const PHC_LIVE = new Set(["/me", "/me/password", "/logout"]);
+const PHC_LIVE = /^\/(me|me\/password|logout|users(\/\d+)?)$/; // เส้นทางที่ รพ.สต. ใช้ข้อมูลจริง
 const PHC_EMPTY = {
+  "/summary": () => ({ waiting: [] }),
   "/analytics": () => ({
     totals: { requisitions: 0, emergency: 0, lines_approved: 0, avg_hours: null, avg_hours_emergency: null },
     weeks: [], by_warehouse: [], by_department: [], top_items: [], idle_items: [], idle_since: null, from: null, to: null,
   }),
 };
-// หน้าตาในระบบ รพ.สต. เป็นแบบหน่วยงานเสมอ (รวมถึงผู้ดูแลคลังกลาง)
-const asSession = (u) => (u?.session_system === "phc" ? { ...u, role: "dept", department_name: "รพ.สต." } : u);
+// บัญชีหน่วยงานของ รพ.สต. ยังไม่มีหน่วยงานในทะเบียน แสดงเป็น "รพ.สต."
+const asSession = (u) => (u?.session_system === "phc" && u.role !== "admin" ? { ...u, department_name: "รพ.สต." } : u);
 function phcApi(method, path) {
   if (method !== "GET") return Promise.reject(new Error("ช่องทาง รพ.สต. อยู่ระหว่างจัดทำ ยังบันทึกข้อมูลไม่ได้"));
   const empty = PHC_EMPTY[path.split("?")[0]];
@@ -44,7 +45,7 @@ function phcApi(method, path) {
 }
 
 async function api(method, path, body) {
-  if (phcMode && !PHC_LIVE.has(path)) return phcApi(method, path);
+  if (phcMode && !PHC_LIVE.test(path)) return phcApi(method, path);
   const res = await fetch("/api" + path, {
     method,
     headers: body !== undefined ? { "Content-Type": "application/json" } : {},
@@ -1531,12 +1532,11 @@ async function departmentsView() {
 async function usersView() {
   const [users, departments] = await Promise.all([api("GET", "/users"), api("GET", "/departments")]);
   view.innerHTML = `${pageHead("บัญชีผู้ใช้", { right: `<button type="button" class="btn primary" data-act="new">+ เพิ่มผู้ใช้</button>` })}
-    <p class="hint">เข้าสู่ระบบด้วย <b>เลขบัตรประชาชน 13 หลัก</b> ครั้งแรกใช้รหัสผ่าน <b>เลข 5 ตัวท้ายของบัตร</b> แล้วระบบจะบังคับให้ตั้งรหัสผ่านใหม่ · ถ้าลืมรหัสผ่าน กด "แก้ไข" แล้วเลือกรีเซ็ตรหัสผ่าน · บัญชี <b>หน่วยงาน</b> เบิกสินค้าและดูได้เฉพาะใบเบิกของหน่วยงานตัวเอง บัญชี <b>ผู้ดูแลคลังกลาง</b> อนุมัติ จ่ายของ และจัดการสต็อกได้ · บัญชีหน่วยงานเข้าได้เฉพาะระบบของตัวเอง (<b>รพ.</b> หรือ <b>รพ.สต.</b>) มีเพียงผู้ดูแลคลังกลางที่เข้าได้ทั้ง 2 ระบบ (ไม่เกิน 5 คน)</p>
-    <div class="list">${table(["เลขบัตรประชาชน", "ชื่อ-นามสกุล", "สิทธิ์", "ระบบ", "หน่วยงาน", "สถานะ", ""],
+    <p class="hint">เข้าสู่ระบบด้วย <b>เลขบัตรประชาชน 13 หลัก</b> ครั้งแรกใช้รหัสผ่าน <b>เลข 5 ตัวท้ายของบัตร</b> แล้วระบบจะบังคับให้ตั้งรหัสผ่านใหม่ · ถ้าลืมรหัสผ่าน กด "แก้ไข" แล้วเลือกรีเซ็ตรหัสผ่าน · บัญชี <b>หน่วยงาน</b> เบิกสินค้าและดูได้เฉพาะใบเบิกของหน่วยงานตัวเอง บัญชี <b>ผู้ดูแลคลังกลาง</b> อนุมัติ จ่ายของ และจัดการสต็อกได้ · หน้านี้แสดงบัญชีของระบบ <b>${phcMode ? "รพ.สต." : "รพ."}</b> บัญชีหน่วยงานที่เพิ่มที่นี่เข้าได้เฉพาะระบบ ${phcMode ? "รพ.สต." : "รพ."} · ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ (ไม่เกิน 5 คน)</p>
+    <div class="list">${table(["เลขบัตรประชาชน", "ชื่อ-นามสกุล", "สิทธิ์", ...(phcMode ? [] : ["หน่วยงาน"]), "สถานะ", ""],
       users.map((u) => [`<span style="font-variant-numeric:tabular-nums">${esc(maskId(u.username))}</span>`, esc(u.full_name),
-        u.role === "admin" ? badge("ผู้ดูแลคลังกลาง", "info") : "หน่วยงาน",
-        u.role === "admin" ? "รพ. และ รพ.สต." : u.system === "phc" ? "รพ.สต." : "รพ.",
-        esc(u.department_name || "-"), u.active ? badge("ใช้งาน", "ok") : badge("ปิดใช้งาน", "muted"),
+        u.role === "admin" ? badge("ผู้ดูแลคลังกลาง (ทั้ง 2 ระบบ)", "info") : `หน่วยงาน${phcMode ? " รพ.สต." : ""}`,
+        ...(phcMode ? [] : [esc(u.department_name || "-")]), u.active ? badge("ใช้งาน", "ok") : badge("ปิดใช้งาน", "muted"),
         actions(btn("edit", "แก้ไข", u.id))]), "ยังไม่มีผู้ใช้")}</div>`;
   const deptOptions = [["", "— ไม่ระบุ —"], ...departments.map((d) => [d.id, d.name + (d.active ? "" : " (ปิดใช้งาน)")])];
   const form = (u) => openForm({
@@ -1545,15 +1545,13 @@ async function usersView() {
       ...(u ? [] : [{ name: "username", label: "เลขบัตรประชาชน 13 หลัก", required: true, placeholder: "x-xxxx-xxxxx-xx-x", autocomplete: "off",
         inputmode: "numeric", hint: "รหัสผ่านครั้งแรกคือเลข 5 ตัวท้ายของบัตร แล้วต้องตั้งรหัสใหม่" }]),
       { name: "full_name", label: "ชื่อ-นามสกุล", required: true },
-      { name: "role", label: "สิทธิ์", type: "select", options: [["dept", "หน่วยงาน (เบิกสินค้า)"], ["admin", "ผู้ดูแลคลังกลาง"]] },
-      { name: "system", label: "ระบบที่เข้าใช้งาน", type: "select", options: [["hospital", "รพ."], ["phc", "รพ.สต."]],
-        hint: "สำหรับบัญชีหน่วยงาน · ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ" },
-      { name: "department_id", label: "หน่วยงาน", type: "select", options: deptOptions, hint: "จำเป็นสำหรับบัญชีหน่วยงานของ รพ." },
+      { name: "role", label: "สิทธิ์", type: "select", options: [["dept", phcMode ? "หน่วยงาน รพ.สต. (เบิกสินค้า)" : "หน่วยงาน (เบิกสินค้า)"], ["admin", "ผู้ดูแลคลังกลาง (ทั้ง 2 ระบบ)"]] },
+      ...(phcMode ? [] : [{ name: "department_id", label: "หน่วยงาน", type: "select", options: deptOptions, hint: "จำเป็นสำหรับสิทธิ์หน่วยงาน" }]),
       ...(u ? [{ name: "active", label: "สถานะ", type: "select", options: [["1", "ใช้งาน"], ["0", "ปิดใช้งาน"]] },
         { name: "reset_password", label: "รหัสผ่าน", type: "select", options: [["0", "ไม่เปลี่ยน"], ["1", "รีเซ็ตเป็นเลข 5 ตัวท้ายของบัตร (ผู้ใช้ต้องตั้งใหม่)"]],
           hint: "ใช้เมื่อผู้ใช้ลืมรหัสผ่าน · การบันทึกจะปลดล็อกบัญชีที่ใส่รหัสผิดหลายครั้งด้วย" }] : []),
     ],
-    values: u ? { ...u, active: String(u.active) } : { role: "dept", system: "hospital" },
+    values: u ? { ...u, active: String(u.active) } : { role: "dept" },
     onSubmit: async (v) => {
       if (!u) v.username = v.username.replace(/\D/g, "");
       await api(u ? "PUT" : "POST", u ? `/users/${u.id}` : "/users", { ...v, active: v.active !== "0", reset_password: v.reset_password === "1" });

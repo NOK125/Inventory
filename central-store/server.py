@@ -517,19 +517,18 @@ def save_department(ctx, body, query, dept_id=None):
 
 
 def list_users(ctx, body, query):
+    # แต่ละระบบเห็นเฉพาะบัญชีของระบบตัวเอง และผู้ดูแลคลังกลาง (ซึ่งเข้าได้ทั้ง 2 ระบบ)
     ctx.require_admin()
-    return [public_user(ctx.conn, u) for u in rows(ctx.conn.execute("SELECT * FROM users ORDER BY role, full_name"))]
+    return [public_user(ctx.conn, u) for u in rows(ctx.conn.execute(
+        "SELECT * FROM users WHERE role = 'admin' OR system = ? ORDER BY role, full_name", (ctx.user["session_system"],)))]
 
 
 def user_values(ctx, body):
     role = body.get("role")
     if role not in ("admin", "dept"):
         raise ApiError(400, "สิทธิ์ไม่ถูกต้อง")
-    system = body.get("system") or "hospital"
-    if system not in SYSTEM_NAMES:
-        raise ApiError(400, "ระบบไม่ถูกต้อง")
-    if role == "admin":
-        system = "hospital"  # ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ
+    # บัญชีหน่วยงานเป็นของระบบที่ผู้ดูแลล็อกอินเข้ามา (ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ)
+    system = "hospital" if role == "admin" else ctx.user["session_system"]
     dept_id = int(body["department_id"]) if str(body.get("department_id") or "").isdigit() else None
     if system == "phc":
         dept_id = None  # หน่วยเบิกในทะเบียนเป็นของ รพ. ยังไม่มีทะเบียนของ รพ.สต.
@@ -556,7 +555,9 @@ def create_user(ctx, body, query):
         uid = ctx.conn.execute("INSERT INTO users (username, password_hash, full_name, role, department_id, system) VALUES (?, ?, ?, ?, ?, ?)",
                                (username, hash_password(default_password(username)), full_name, role, dept_id, system)).lastrowid
     except sqlite3.IntegrityError:
-        raise ApiError(409, "มีบัญชีของเลขบัตรนี้แล้ว")
+        other = one(ctx.conn, "SELECT role, system FROM users WHERE username = ?", (username,))
+        where = "" if not other or other["role"] == "admin" else f" ในระบบ {SYSTEM_NAMES.get(other['system'], other['system'])}"
+        raise ApiError(409, f"มีบัญชีของเลขบัตรนี้แล้ว{where}")
     return public_user(ctx.conn, one(ctx.conn, "SELECT * FROM users WHERE id = ?", (uid,)))
 
 
@@ -565,7 +566,7 @@ def update_user(ctx, body, query, user_id):
     full_name, role, dept_id, system = user_values(ctx, body)
     active = flag(body.get("active", True))
     before = one(ctx.conn, "SELECT role, active, system FROM users WHERE id = ?", (user_id,))
-    if not before:
+    if not before or (before["role"] != "admin" and before["system"] != ctx.user["session_system"]):
         raise ApiError(404, "ไม่พบผู้ใช้นี้")
     # ตรวจจำนวนผู้ดูแลเฉพาะตอนเพิ่มผู้ดูแลที่ใช้งานอยู่ (แก้ชื่อผู้ดูแลเดิมได้เสมอ)
     if role == "admin" and active and not (before["role"] == "admin" and before["active"]):
@@ -1641,6 +1642,8 @@ route("POST", "/logout", logout, public=True)
 route("GET", "/me", get_me)
 route("POST", "/me/password", change_password)
 BEFORE_PASSWORD_CHANGE.update({get_me, change_password})
+# เซสชัน รพ.สต. เรียกได้เฉพาะเส้นทางเหล่านี้ (ยังไม่มีข้อมูลอื่นของ รพ.สต.)
+PHC_ALLOWED = {list_users, create_user, update_user}
 route("GET", "/warehouses", list_warehouses)
 route("GET", "/departments", list_departments)
 route("POST", "/departments", save_department)
@@ -1769,7 +1772,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(401, "กรุณาเข้าสู่ระบบ")
                 if ctx.user and ctx.user["must_change_password"] and handler not in PUBLIC | BEFORE_PASSWORD_CHANGE:
                     raise ApiError(403, "กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน")
-                if ctx.user and ctx.user["session_system"] != "hospital" and handler not in PUBLIC | BEFORE_PASSWORD_CHANGE:
+                if ctx.user and ctx.user["session_system"] != "hospital" and handler not in PUBLIC | BEFORE_PASSWORD_CHANGE | PHC_ALLOWED:
                     raise ApiError(403, "ระบบ รพ.สต. ยังไม่เปิดใช้ข้อมูล และเข้าถึงข้อมูลของ รพ. ไม่ได้")
                 if ctx.user:
                     record_activity(conn, ctx.user["id"])
