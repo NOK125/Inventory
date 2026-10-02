@@ -1490,7 +1490,7 @@ async function departmentsView() {
     ...list.map((d) => d.group_name).filter(Boolean)])];
   let editing = null;
   const draw = () => {
-    view.innerHTML = `${pageHead("ทะเบียนหน่วยเบิกในรพ.", {
+    view.innerHTML = `${pageHead(navLabel("departments"), {
         over: "ทะเบียน · หน่วยงานที่เบิกจากคลังกลางได้",
         right: admin ? `<button type="button" class="btn primary" data-act="new">+ เพิ่มหน่วยเบิก</button>` : "",
       })}
@@ -2043,7 +2043,7 @@ const VIEWS = {
   regRequester: ["ทะเบียนผู้เบิกสินค้า", () => peopleView("requester")],
   regReceiver: ["ทะเบียนผู้รับสินค้า", () => peopleView("receiver")],
   regCentral: ["ทะเบียนเจ้าหน้าที่คลังกลาง", () => peopleView("central"), "admin"],
-  departments: ["ทะเบียนหน่วยเบิกในรพ.", departmentsView],
+  departments: [() => (phcMode ? "ทะเบียนหน่วยเบิกในรพ.สต." : "ทะเบียนหน่วยเบิกในรพ."), departmentsView],
   users: ["บัญชีผู้ใช้", usersView, "admin"],
   analytics: ["Dashboard", analyticsView],
   guidelines: ["แนวทางปฏิบัติ", guidelinesView],
