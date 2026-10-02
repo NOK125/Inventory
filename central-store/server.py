@@ -729,12 +729,6 @@ def list_items(ctx, body, query):
     return rows(ctx.conn.execute(ITEM_SQL + ("" if show_all else " WHERE i.active = 1") + " ORDER BY i.warehouse_id, i.code"))
 
 
-def next_item_code(conn):
-    """รหัสสินค้าอัตโนมัติของ รพ.สต. (ไฟล์นำเข้าไม่มีรหัส): P00001, P00002, ..."""
-    last = conn.execute("SELECT MAX(CAST(SUBSTR(code, 2) AS INTEGER)) FROM items WHERE code GLOB 'P[0-9]*'").fetchone()[0]
-    return f"P{(last or 0) + 1:05d}"
-
-
 def is_phc(ctx):
     return bool(ctx.user) and ctx.user["session_system"] == "phc"
 
@@ -748,8 +742,7 @@ def item_values(ctx, body):
     wh = body.get("warehouse_id")
     if not str(wh or "").isdigit() or not ctx.conn.execute("SELECT 1 FROM warehouses WHERE id = ?", (int(wh),)).fetchone():
         raise ApiError(400, "กรุณาเลือกคลัง")
-    code = text(body.get("code"), "รหัสสินค้า", not is_phc(ctx)) or next_item_code(ctx.conn)
-    return (code, text(body.get("name"), "ชื่อสินค้า", True), int(wh),
+    return (text(body.get("code"), "รหัสสินค้า", True), text(body.get("name"), "ชื่อสินค้า", True), int(wh),
             text(body.get("unit"), "หน่วยนับ", True), number(body.get("min_qty"), "จุดสั่งซื้อ", minimum=0) or 0,
             flag(body.get("active", True)))
 
@@ -902,14 +895,15 @@ IMPORT_COLUMNS = {
     "min_qty": ["จุดสั่งซื้อ", "ขั้นต่ำ", "min", "reorder"],
 }
 REQUIRED_COLUMNS = {"code": "รหัสสินค้า", "name": "ชื่อสินค้า", "warehouse": "คลัง", "unit": "หน่วยนับ"}
-# ระบบ รพ.สต.: ไฟล์มีแค่ ชื่อสินค้า หน่วยย่อย ราคาในหน่วยย่อย (เบิก) คลัง · รหัสสินค้าระบบตั้งให้
+# ระบบ รพ.สต.: ไฟล์มี รหัสสินค้า ชื่อสินค้า หน่วยย่อย ราคาในหน่วยย่อย (เบิก) คลัง
 PHC_IMPORT_COLUMNS = {
+    "code": ["รหัสสินค้า", "รหัส", "code", "itemcode"],
     "name": ["ชื่อสินค้า", "ชื่อ", "รายการ", "name"],
     "unit": ["หน่วยย่อย", "หน่วยนับ", "หน่วย", "unit"],
     "price": ["ราคาในหน่วยย่อยเบิก", "ราคาในหน่วยย่อย", "ราคาต่อหน่วย", "ราคา", "price"],
     "warehouse": ["คลัง", "ชื่อคลัง", "รหัสคลัง", "warehouse"],
 }
-PHC_REQUIRED_COLUMNS = {"name": "ชื่อสินค้า", "unit": "หน่วยย่อย", "price": "ราคาในหน่วยย่อย (เบิก)", "warehouse": "คลัง"}
+PHC_REQUIRED_COLUMNS = {"code": "รหัสสินค้า", "name": "ชื่อสินค้า", "unit": "หน่วยย่อย", "price": "ราคาในหน่วยย่อย (เบิก)", "warehouse": "คลัง"}
 
 
 def header_key(text, columns=IMPORT_COLUMNS):
@@ -987,18 +981,17 @@ def read_import_table(body):
 
 
 def import_items_phc(ctx, body, table):
-    """นำเข้าสินค้าของ รพ.สต.: สินค้าเดิมหาจากชื่อสินค้า + คลัง (ไม่มีรหัสในไฟล์) แล้วอัปเดตหน่วยย่อยและราคา"""
+    """นำเข้าสินค้าของ รพ.สต.: รหัสที่มีอยู่แล้วจะอัปเดตชื่อ คลัง หน่วยย่อย และราคา แทนการเพิ่มซ้ำ (ไม่มียอดคงเหลือในไฟล์)"""
     header_row, columns = find_header(table, PHC_IMPORT_COLUMNS, PHC_REQUIRED_COLUMNS)
     warehouses = rows(ctx.conn.execute("SELECT * FROM warehouses"))
-    norm = lambda t: re.sub(r"\s+", " ", t).strip().lower()
-    existing = {(norm(r["name"]), r["warehouse_id"]): r for r in rows(ctx.conn.execute("SELECT * FROM items"))}
+    existing = {r["code"]: r for r in rows(ctx.conn.execute("SELECT * FROM items"))}
     results, seen = [], set()
     for n, row in enumerate(table[header_row + 1:], start=header_row + 2):
         get = lambda key: row[columns[key]].strip() if key in columns and columns[key] < len(row) else ""
         values = {k: get(k) for k in PHC_IMPORT_COLUMNS}
         if not any(values.values()):
             continue
-        r = {"row": n, "code": "", "name": values["name"], "warehouse": values["warehouse"], "unit": values["unit"],
+        r = {"row": n, "code": values["code"], "name": values["name"], "warehouse": values["warehouse"], "unit": values["unit"],
              "price": None, "qty": None, "action": "error", "message": ""}
         results.append(r)
         if len(results) > MAX_IMPORT_ROWS:
@@ -1010,22 +1003,24 @@ def import_items_phc(ctx, body, table):
             wh = find_warehouse_in(warehouses, values["warehouse"])
             if not wh:
                 raise ValueError(f"ไม่รู้จักคลัง \"{values['warehouse']}\"")
-            key = (norm(values["name"]), wh["id"])
-            if key in seen:
-                raise ValueError("ชื่อสินค้าซ้ำกับแถวก่อนหน้าในไฟล์ (คลังเดียวกัน)")
-            seen.add(key)
+            if values["code"] in seen:
+                raise ValueError("รหัสซ้ำกับแถวก่อนหน้าในไฟล์")
+            seen.add(values["code"])
             price = import_number(values["price"], "ราคาในหน่วยย่อย")
         except ValueError as err:
             r["message"] = str(err)
             continue
         r.update(warehouse=wh["name"], warehouse_id=wh["id"], price=price)
-        old = existing.get(key)
+        old = existing.get(values["code"])
         if not old:
             r["action"] = "new"
             r["message"] = "เพิ่มใหม่" + (f" ราคา {price:,.2f} บาท/{values['unit']}" if price is not None else " (ยังไม่มีราคา)")
             continue
-        r["code"] = old["code"]
         changes = []
+        if old["name"] != values["name"]:
+            changes.append("ชื่อ")
+        if old["warehouse_id"] != wh["id"]:
+            changes.append("คลัง")
         if old["unit"] != values["unit"]:
             changes.append("หน่วยย่อย")
         if price is not None and old["unit_price"] != price:
@@ -1037,12 +1032,11 @@ def import_items_phc(ctx, body, table):
     if body.get("apply") is True:
         for r in results:
             if r["action"] == "new":
-                r["code"] = next_item_code(ctx.conn)
                 ctx.conn.execute("INSERT INTO items (code, name, warehouse_id, unit, unit_price) VALUES (?, ?, ?, ?, ?)",
                                  (r["code"], r["name"], r["warehouse_id"], r["unit"], r["price"]))
             elif r["action"] == "update":
-                ctx.conn.execute("UPDATE items SET unit = ?, unit_price = COALESCE(?, unit_price) WHERE id = ?",
-                                 (r["unit"], r["price"], r["item_id"]))
+                ctx.conn.execute("UPDATE items SET name = ?, warehouse_id = ?, unit = ?, unit_price = COALESCE(?, unit_price) WHERE id = ?",
+                                 (r["name"], r["warehouse_id"], r["unit"], r["price"], r["item_id"]))
     counts = {k: sum(1 for r in results if r["action"] == k) for k in ("new", "update", "same", "error")}
     for r in results:
         r.pop("item_id", None)

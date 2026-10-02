@@ -1259,8 +1259,7 @@ async function itemsView() {
 
   const byId = (id) => items.find((i) => String(i.id) === String(id));
   const fields = [
-    phcMode ? { name: "code", label: "รหัสสินค้า", placeholder: "เว้นว่างได้", hint: "เว้นว่างให้ระบบตั้งให้ (P00001, P00002, ...)" }
-      : { name: "code", label: "รหัสสินค้า", required: true, placeholder: "เช่น MED-0001" },
+    { name: "code", label: "รหัสสินค้า", required: true, placeholder: "เช่น MED-0001" },
     { name: "name", label: "ชื่อสินค้า", required: true, placeholder: "เช่น ถุงมือยาง ไซส์ M" },
     { name: "warehouse_id", label: "คลัง", type: "select", required: true, options: [["", "— เลือกคลัง —"], ...warehouses.map((w) => [w.id, w.name])] },
     { name: "unit", label: phcMode ? "หน่วยย่อย" : "หน่วยนับ", required: true, list: "units", placeholder: "เช่น กล่อง, ชิ้น, ขวด, รีม", hint: "สินค้าละหน่วยนับเดียว" },
@@ -1319,9 +1318,9 @@ const IMPORT_ACTION = { new: ["เพิ่มใหม่", "ok"], update: ["�
 const IMPORT_MAX_MB = 8;
 
 function downloadImportTemplate() {
-  const rows = phcMode ? [["ชื่อสินค้า", "หน่วยย่อย", "ราคาในหน่วยย่อย (เบิก)", "คลัง"],
-    ["ถุงมือยาง ไซส์ M", "กล่อง", "120", "คลังเวชภัณฑ์มิใช่ยา"],
-    ["สำลีก้อน", "ห่อ", "35.50", "คลังเวชภัณฑ์มิใช่ยา"]]
+  const rows = phcMode ? [["รหัสสินค้า", "ชื่อสินค้า", "หน่วยย่อย", "ราคาในหน่วยย่อย (เบิก)", "คลัง"],
+    ["MED-001", "ถุงมือยาง ไซส์ M", "กล่อง", "120", "คลังเวชภัณฑ์มิใช่ยา"],
+    ["MED-002", "สำลีก้อน", "ห่อ", "35.50", "คลังเวชภัณฑ์มิใช่ยา"]]
     : [["รหัสสินค้า", "ชื่อสินค้า", "คลัง", "หน่วยนับ", "คงเหลือ", "จุดสั่งซื้อ"],
     ["IT-001", "เมาส์ USB", "คลังเทคโนโลยีสารสนเทศ", "อัน", "15", "5"],
     ["MED-001", "ถุงมือยาง ไซส์ M", "คลังเวชภัณฑ์มิใช่ยา", "กล่อง", "30", "10"]];
@@ -1366,11 +1365,11 @@ function openImport() {
       <div class="row-between"><b>รูปแบบคอลัมน์ในไฟล์ (แถวแรกเป็นหัวตาราง)</b>
         <button type="button" class="link" data-imp="template">ดาวน์โหลดไฟล์ต้นแบบ (.csv)</button></div>
       ${phcMode ? `<div class="table-wrap"><table>
-        <thead><tr><th>ชื่อสินค้า *</th><th>หน่วยย่อย *</th><th class="num">ราคาในหน่วยย่อย (เบิก)</th><th>คลัง *</th></tr></thead>
-        <tbody><tr><td>ถุงมือยาง ไซส์ M</td><td>กล่อง</td><td class="num">120</td><td>คลังเวชภัณฑ์มิใช่ยา</td></tr></tbody>
+        <thead><tr><th>รหัสสินค้า *</th><th>ชื่อสินค้า *</th><th>หน่วยย่อย *</th><th class="num">ราคาในหน่วยย่อย (เบิก)</th><th>คลัง *</th></tr></thead>
+        <tbody><tr><td>MED-001</td><td>ถุงมือยาง ไซส์ M</td><td>กล่อง</td><td class="num">120</td><td>คลังเวชภัณฑ์มิใช่ยา</td></tr></tbody>
       </table></div>
       <small>คลัง: ใส่ชื่อหรือรหัสคลัง (${warehouses.map((w) => `${esc(w.name)} = ${esc(w.code)}`).join(" · ")})<br>
-        ระบบตั้งรหัสสินค้าให้เอง · ชื่อสินค้าในคลังเดียวกันที่มีอยู่แล้วจะอัปเดตหน่วยย่อยและราคาแทนการเพิ่มซ้ำ · ราคาใช้เป็นราคาตั้งต้นตอนจ่ายของ</small>`
+        รหัสที่มีอยู่แล้วในระบบจะอัปเดตชื่อ คลัง หน่วยย่อย และราคา แทนการเพิ่มซ้ำ · ราคาใช้เป็นราคาตั้งต้นตอนจ่ายของ</small>`
       : `<div class="table-wrap"><table>
         <thead><tr><th>รหัสสินค้า *</th><th>ชื่อสินค้า *</th><th>คลัง *</th><th>หน่วยนับ *</th><th class="num">คงเหลือ</th><th class="num">จุดสั่งซื้อ</th></tr></thead>
         <tbody><tr><td>IT-001</td><td>เมาส์ USB</td><td>คลังเทคโนโลยีสารสนเทศ</td><td>อัน</td><td class="num">15</td><td class="num">5</td></tr></tbody>
@@ -1390,9 +1389,9 @@ function openImport() {
       ${phcMode ? "" : `<label class="check"><input type="checkbox" id="imp-stock" ${st.updateStock ? "checked" : ""}>
         <span>ปรับยอดคงเหลือของสินค้าที่มีอยู่แล้วให้ตรงกับคอลัมน์ "คงเหลือ" ในไฟล์ <small>(ใช้ตอนตรวจนับสต็อก · บันทึกในประวัติสต็อก)</small></span></label>`}
       <div class="table-wrap imp-table"><table>
-        <thead><tr><th class="num">แถว</th>${phcMode ? "" : "<th>รหัส</th>"}<th>ชื่อสินค้า</th><th>คลัง</th><th>${phcMode ? "หน่วยย่อย" : "หน่วย"}</th>
+        <thead><tr><th class="num">แถว</th><th>รหัส</th><th>ชื่อสินค้า</th><th>คลัง</th><th>${phcMode ? "หน่วยย่อย" : "หน่วย"}</th>
           <th class="num">${phcMode ? "ราคา (บาท)" : "คงเหลือ"}</th><th>ผลตรวจ</th></tr></thead>
-        <tbody>${shown.map((x) => `<tr class="imp-${x.action}"><td class="num">${x.row}</td>${phcMode ? "" : `<td class="nowrap">${esc(x.code || "-")}</td>`}<td>${esc(x.name || "-")}</td>
+        <tbody>${shown.map((x) => `<tr class="imp-${x.action}"><td class="num">${x.row}</td><td class="nowrap">${esc(x.code || "-")}</td><td>${esc(x.name || "-")}</td>
           <td>${esc(x.warehouse || "-")}</td><td>${esc(x.unit || "-")}</td><td class="num">${phcMode ? baht(x.price) : x.qty == null ? "-" : num(x.qty)}</td>
           <td class="msg">${badge(...IMPORT_ACTION[x.action])} ${esc(x.message)}</td></tr>`).join("")}</tbody>
       </table></div>
