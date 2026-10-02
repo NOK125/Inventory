@@ -250,6 +250,11 @@ def init_db():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
         if "must_change_password" not in cols:
             conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 1")
+        # แยกระบบ รพ. / รพ.สต.: บัญชีเดิมทั้งหมดเป็นของ รพ. (ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ)
+        if "system" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN system TEXT NOT NULL DEFAULT 'hospital'")
+        if "system" not in {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}:
+            conn.execute("ALTER TABLE sessions ADD COLUMN system TEXT NOT NULL DEFAULT 'hospital'")
         # เพิ่มคลังตั้งต้นที่ยังไม่มี (ฐานข้อมูลเดิมได้คลังใหม่อัตโนมัติ ไม่แตะคลังที่มีอยู่)
         conn.executemany("INSERT OR IGNORE INTO warehouses (code, name, initials, hue, description) VALUES (?, ?, ?, ?, ?)",
                          DEFAULT_WAREHOUSES)
@@ -360,16 +365,19 @@ def token_hash(token):
 def session_user(conn, token):
     if not token:
         return None
-    user = one(conn, """SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+    user = one(conn, """SELECT u.*, s.system AS session_system FROM sessions s JOIN users u ON u.id = s.user_id
                         WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1""", (token_hash(token), now()))
     return user
 
 
-def public_user(conn, u):
+def public_user(conn, u, session_system=None):
     d = one(conn, "SELECT name, code FROM departments WHERE id = ?", (u["department_id"],)) if u["department_id"] else None
-    return {"id": u["id"], "username": u["username"], "full_name": u["full_name"], "role": u["role"],
-            "department_id": u["department_id"], "active": u["active"], "must_change_password": u["must_change_password"],
-            "department_name": d["name"] if d else None, "department_code": d["code"] if d else None}
+    out = {"id": u["id"], "username": u["username"], "full_name": u["full_name"], "role": u["role"], "system": u["system"],
+           "department_id": u["department_id"], "active": u["active"], "must_change_password": u["must_change_password"],
+           "department_name": d["name"] if d else None, "department_code": d["code"] if d else None}
+    if session_system:
+        out["session_system"] = session_system  # ระบบที่ล็อกอินเข้ามาในเซสชันนี้
+    return out
 
 
 ACTIVITY_KEEP_DAYS = 365
@@ -388,10 +396,11 @@ def record_activity(conn, user_id):
     _activity_seen.add(key)
 
 
-def start_session(ctx, user):
+def start_session(ctx, user, system="hospital"):
     token = secrets.token_urlsafe(32)
     expires = (datetime.now() + timedelta(hours=SESSION_HOURS)).isoformat(timespec="seconds")
-    ctx.conn.execute("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)", (token_hash(token), user["id"], expires))
+    ctx.conn.execute("INSERT INTO sessions (token_hash, user_id, expires_at, system) VALUES (?, ?, ?, ?)",
+                     (token_hash(token), user["id"], expires, system))
     ctx.cookie = session_cookie(token, int(SESSION_HOURS * 3600), ctx.secure)
 
 
@@ -416,10 +425,15 @@ def setup(ctx, body, query):
     ctx.conn.execute("INSERT INTO people (kind, full_name, position) VALUES ('central', ?, NULL)", (full_name,))
     user = one(ctx.conn, "SELECT * FROM users WHERE id = ?", (cur.lastrowid,))
     start_session(ctx, user)
-    return public_user(ctx.conn, user)
+    return public_user(ctx.conn, user, "hospital")
+
+
+SYSTEM_NAMES = {"hospital": "รพ.", "phc": "รพ.สต."}
+MAX_ADMINS = 5  # ผู้ดูแลคลังกลาง (เข้าได้ทั้ง รพ. และ รพ.สต.) ที่ใช้งานอยู่ได้ไม่เกินจำนวนนี้
 
 
 def login(ctx, body, query):
+    system = "phc" if body.get("system") == "phc" else "hospital"
     username = re.sub(r"\D", "", str(body.get("username") or ""))
     password = str(body.get("password") or "")
     user = one(ctx.conn, "SELECT * FROM users WHERE username = ?", (username,))
@@ -438,9 +452,13 @@ def login(ctx, body, query):
         raise fail
     if not user["active"]:
         raise ApiError(403, "บัญชีนี้ถูกปิดใช้งาน ติดต่อเจ้าหน้าที่คลังกลาง")
+    # บัญชีหน่วยงานเข้าได้เฉพาะระบบของตัวเอง ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ
+    if user["role"] != "admin" and user["system"] != system:
+        mine = SYSTEM_NAMES.get(user["system"], user["system"])
+        raise ApiError(403, f"บัญชีนี้ใช้ได้เฉพาะระบบ {mine} กรุณากลับไปเลือกช่องทาง \"ใช้งานโดย {mine}\"")
     ctx.conn.execute("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?", (user["id"],))
-    start_session(ctx, user)
-    return public_user(ctx.conn, user)
+    start_session(ctx, user, system)
+    return public_user(ctx.conn, user, system)
 
 
 def logout(ctx, body, query):
@@ -451,7 +469,7 @@ def logout(ctx, body, query):
 
 
 def get_me(ctx, body, query):
-    return public_user(ctx.conn, ctx.user)
+    return public_user(ctx.conn, ctx.user, ctx.user["session_system"])
 
 
 def change_password(ctx, body, query):
@@ -463,7 +481,7 @@ def change_password(ctx, body, query):
     ctx.conn.execute("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?", (hash_password(new), user["id"]))
     # ออกจากระบบทุกเครื่องอื่น เหลือเครื่องนี้
     ctx.conn.execute("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (user["id"], token_hash(ctx.token or "")))
-    return public_user(ctx.conn, one(ctx.conn, "SELECT * FROM users WHERE id = ?", (user["id"],)))
+    return public_user(ctx.conn, one(ctx.conn, "SELECT * FROM users WHERE id = ?", (user["id"],)), user["session_system"])
 
 
 # ---------- คลัง หน่วยงาน ผู้ใช้ ----------
@@ -507,21 +525,36 @@ def user_values(ctx, body):
     role = body.get("role")
     if role not in ("admin", "dept"):
         raise ApiError(400, "สิทธิ์ไม่ถูกต้อง")
+    system = body.get("system") or "hospital"
+    if system not in SYSTEM_NAMES:
+        raise ApiError(400, "ระบบไม่ถูกต้อง")
+    if role == "admin":
+        system = "hospital"  # ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ
     dept_id = int(body["department_id"]) if str(body.get("department_id") or "").isdigit() else None
-    if role == "dept" and not dept_id:
-        raise ApiError(400, "บัญชีหน่วยงานต้องระบุหน่วยงาน")
+    if system == "phc":
+        dept_id = None  # หน่วยเบิกในทะเบียนเป็นของ รพ. ยังไม่มีทะเบียนของ รพ.สต.
+    if role == "dept" and system == "hospital" and not dept_id:
+        raise ApiError(400, "บัญชีหน่วยงานของ รพ. ต้องระบุหน่วยงาน")
     if dept_id and not ctx.conn.execute("SELECT 1 FROM departments WHERE id = ?", (dept_id,)).fetchone():
         raise ApiError(400, "ไม่พบหน่วยงานนี้")
-    return text(body.get("full_name"), "ชื่อ-นามสกุล", True), role, dept_id
+    return text(body.get("full_name"), "ชื่อ-นามสกุล", True), role, dept_id, system
+
+
+def check_admin_limit(ctx, user_id=None):
+    others = ctx.conn.execute("SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1 AND id != ?", (user_id or 0,)).fetchone()[0]
+    if others >= MAX_ADMINS:
+        raise ApiError(409, f"ผู้ดูแลคลังกลางที่ใช้งานอยู่มีได้ไม่เกิน {MAX_ADMINS} คน ปิดใช้งานหรือเปลี่ยนสิทธิ์บัญชีอื่นก่อน")
 
 
 def create_user(ctx, body, query):
     ctx.require_admin()
     username = national_id(body.get("username"))
-    full_name, role, dept_id = user_values(ctx, body)
+    full_name, role, dept_id, system = user_values(ctx, body)
+    if role == "admin":
+        check_admin_limit(ctx)
     try:
-        uid = ctx.conn.execute("INSERT INTO users (username, password_hash, full_name, role, department_id) VALUES (?, ?, ?, ?, ?)",
-                               (username, hash_password(default_password(username)), full_name, role, dept_id)).lastrowid
+        uid = ctx.conn.execute("INSERT INTO users (username, password_hash, full_name, role, department_id, system) VALUES (?, ?, ?, ?, ?, ?)",
+                               (username, hash_password(default_password(username)), full_name, role, dept_id, system)).lastrowid
     except sqlite3.IntegrityError:
         raise ApiError(409, "มีบัญชีของเลขบัตรนี้แล้ว")
     return public_user(ctx.conn, one(ctx.conn, "SELECT * FROM users WHERE id = ?", (uid,)))
@@ -529,21 +562,26 @@ def create_user(ctx, body, query):
 
 def update_user(ctx, body, query, user_id):
     ctx.require_admin()
-    full_name, role, dept_id = user_values(ctx, body)
+    full_name, role, dept_id, system = user_values(ctx, body)
     active = flag(body.get("active", True))
-    if not one(ctx.conn, "SELECT id FROM users WHERE id = ?", (user_id,)):
+    before = one(ctx.conn, "SELECT role, active, system FROM users WHERE id = ?", (user_id,))
+    if not before:
         raise ApiError(404, "ไม่พบผู้ใช้นี้")
+    # ตรวจจำนวนผู้ดูแลเฉพาะตอนเพิ่มผู้ดูแลที่ใช้งานอยู่ (แก้ชื่อผู้ดูแลเดิมได้เสมอ)
+    if role == "admin" and active and not (before["role"] == "admin" and before["active"]):
+        check_admin_limit(ctx, user_id)
     others = ctx.conn.execute("SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1 AND id != ?", (user_id,)).fetchone()[0]
     if not others and (role != "admin" or not active):
         raise ApiError(409, "ต้องมีผู้ดูแลคลังกลางที่ใช้งานอยู่อย่างน้อย 1 บัญชี")
     # ปลดล็อกบัญชีไปด้วยเมื่อผู้ดูแลบันทึก
-    ctx.conn.execute("UPDATE users SET full_name = ?, role = ?, department_id = ?, active = ?, failed_logins = 0, locked_until = NULL WHERE id = ?",
-                     (full_name, role, dept_id, active, user_id))
+    ctx.conn.execute("UPDATE users SET full_name = ?, role = ?, department_id = ?, active = ?, system = ?, failed_logins = 0, locked_until = NULL WHERE id = ?",
+                     (full_name, role, dept_id, active, system, user_id))
     if body.get("reset_password") is True:
         target = one(ctx.conn, "SELECT username FROM users WHERE id = ?", (user_id,))
         ctx.conn.execute("UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?",
                          (hash_password(default_password(target["username"])), user_id))
-    if not active or body.get("reset_password") is True:
+    # ปิดใช้งาน รีเซ็ตรหัส หรือย้ายระบบ/สิทธิ์: ออกจากระบบทุกเครื่อง
+    if not active or body.get("reset_password") is True or role != before["role"] or system != before["system"]:
         ctx.conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
     return public_user(ctx.conn, one(ctx.conn, "SELECT * FROM users WHERE id = ?", (user_id,)))
 
@@ -1731,6 +1769,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(401, "กรุณาเข้าสู่ระบบ")
                 if ctx.user and ctx.user["must_change_password"] and handler not in PUBLIC | BEFORE_PASSWORD_CHANGE:
                     raise ApiError(403, "กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน")
+                if ctx.user and ctx.user["session_system"] != "hospital" and handler not in PUBLIC | BEFORE_PASSWORD_CHANGE:
+                    raise ApiError(403, "ระบบ รพ.สต. ยังไม่เปิดใช้ข้อมูล และเข้าถึงข้อมูลของ รพ. ไม่ได้")
                 if ctx.user:
                     record_activity(conn, ctx.user["id"])
                 # ล็อกฐานข้อมูลตั้งแต่ต้นสำหรับคำสั่งที่เขียนข้อมูล กันการตัดสต็อกซ้อนกัน
