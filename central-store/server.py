@@ -28,6 +28,9 @@ from urllib.parse import parse_qs, quote, urlparse
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DB_PATH = Path(os.environ.get("CENTRAL_STORE_DB", BASE_DIR / "data" / "central-store.db"))
+# ระบบ รพ.สต. ใช้ฐานข้อมูลแยก (สินค้า ใบเบิก ทะเบียน ฯลฯ) ส่วนบัญชีผู้ใช้และการล็อกอินอยู่ในฐานข้อมูลหลัก
+PHC_DB_PATH = Path(os.environ.get("CENTRAL_STORE_PHC_DB", DB_PATH.with_name(DB_PATH.stem + "-phc" + DB_PATH.suffix)))
+DB_PATHS = {"hospital": DB_PATH, "phc": PHC_DB_PATH}
 BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", DB_PATH.parent / "backups"))
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8000"))
@@ -212,7 +215,8 @@ class Ctx:
     """ข้อมูลของคำขอหนึ่งครั้ง: ฐานข้อมูล ผู้ใช้ที่ล็อกอิน และคุกกี้ที่จะส่งกลับ"""
 
     def __init__(self, conn, user, token=None, secure=False):
-        self.conn = conn
+        self.conn = conn  # ฐานข้อมูลของระบบที่ล็อกอินเข้ามา (รพ. หรือ รพ.สต.)
+        self.auth = conn  # ฐานข้อมูลหลัก: บัญชีผู้ใช้และเซสชัน
         self.user = user
         self.token = token
         self.secure = secure  # เปิดผ่าน HTTPS: คุกกี้ส่งเฉพาะทาง HTTPS
@@ -232,8 +236,8 @@ def now():
     return datetime.now().isoformat(timespec="seconds")
 
 
-def connect():
-    conn = sqlite3.connect(DB_PATH, timeout=10, isolation_level=None)
+def connect(system="hospital"):
+    conn = sqlite3.connect(DB_PATHS[system], timeout=10, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 10000")
@@ -241,8 +245,13 @@ def connect():
 
 
 def init_db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = connect()
+    for system in DB_PATHS:
+        init_one(system)
+
+
+def init_one(system):
+    DB_PATHS[system].parent.mkdir(parents=True, exist_ok=True)
+    conn = connect(system)
     try:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
@@ -370,8 +379,21 @@ def session_user(conn, token):
     return user
 
 
+def find_department(conn, system, dept_id):
+    """หน่วยเบิกในทะเบียนของระบบ (conn คือฐานข้อมูลหลัก ระบบ รพ.สต. เปิดฐานข้อมูลของตัวเอง)"""
+    if not dept_id:
+        return None
+    if system == "hospital":
+        return one(conn, "SELECT name, code FROM departments WHERE id = ?", (dept_id,))
+    other = connect(system)
+    try:
+        return one(other, "SELECT name, code FROM departments WHERE id = ?", (dept_id,))
+    finally:
+        other.close()
+
+
 def public_user(conn, u, session_system=None):
-    d = one(conn, "SELECT name, code FROM departments WHERE id = ?", (u["department_id"],)) if u["department_id"] else None
+    d = find_department(conn, u["system"], u["department_id"])
     out = {"id": u["id"], "username": u["username"], "full_name": u["full_name"], "role": u["role"], "system": u["system"],
            "department_id": u["department_id"], "active": u["active"], "must_change_password": u["must_change_password"],
            "department_name": d["name"] if d else None, "department_code": d["code"] if d else None}
@@ -384,16 +406,31 @@ ACTIVITY_KEEP_DAYS = 365
 _activity_seen = set()  # (user_id, hour) ที่บันทึกแล้วในชั่วโมงนี้ กันเขียนฐานข้อมูลทุกคำขอ
 
 
-def record_activity(conn, user_id):
+def record_activity(conn, user_id, system="hospital"):
     """นับผู้ใช้ที่ใช้งานในแต่ละชั่วโมง (สำหรับ Dashboard การใช้งานระบบ)"""
     hour = datetime.now().strftime("%Y-%m-%dT%H")
-    key = (user_id, hour)
+    key = (user_id, hour, system)
     if key in _activity_seen:
         return
-    if len(_activity_seen) > 5000 or any(h != hour for _, h in list(_activity_seen)[:1]):
+    if len(_activity_seen) > 5000 or any(k[1] != hour for k in list(_activity_seen)[:1]):
         _activity_seen.clear()
-    conn.execute("INSERT OR IGNORE INTO user_activity (user_id, hour) VALUES (?, ?)", key)
+    conn.execute("INSERT OR IGNORE INTO user_activity (user_id, hour) VALUES (?, ?)", key[:2])
     _activity_seen.add(key)
+
+
+MIRROR_COLS = ("id", "username", "full_name", "role", "department_id", "active", "system")
+
+
+def mirror_user(conn, user):
+    """คัดลอกข้อมูลผู้ใช้ไปฐานข้อมูล รพ.สต. (ไม่มีรหัสผ่าน ใช้ล็อกอินไม่ได้) เฉพาะเมื่อมีการเปลี่ยนแปลง"""
+    have = one(conn, f"SELECT {', '.join(MIRROR_COLS)} FROM users WHERE id = ?", (user["id"],))
+    want = {k: user[k] for k in MIRROR_COLS}
+    if user["system"] != "phc":
+        want["department_id"] = None  # หน่วยงานของ รพ. ไม่มีในทะเบียนของ รพ.สต.
+    if have == want:
+        return
+    conn.execute(f"""INSERT INTO users ({', '.join(MIRROR_COLS)}, password_hash, must_change_password) VALUES ({', '.join('?' * len(MIRROR_COLS))}, '!', 0)
+        ON CONFLICT(id) DO UPDATE SET {', '.join(f'{k} = excluded.{k}' for k in MIRROR_COLS[1:])}""", tuple(want.values()))
 
 
 def start_session(ctx, user, system="hospital"):
@@ -530,11 +567,9 @@ def user_values(ctx, body):
     # บัญชีหน่วยงานเป็นของระบบที่ผู้ดูแลล็อกอินเข้ามา (ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ)
     system = "hospital" if role == "admin" else ctx.user["session_system"]
     dept_id = int(body["department_id"]) if str(body.get("department_id") or "").isdigit() else None
-    if system == "phc":
-        dept_id = None  # หน่วยเบิกในทะเบียนเป็นของ รพ. ยังไม่มีทะเบียนของ รพ.สต.
-    if role == "dept" and system == "hospital" and not dept_id:
-        raise ApiError(400, "บัญชีหน่วยงานของ รพ. ต้องระบุหน่วยงาน")
-    if dept_id and not ctx.conn.execute("SELECT 1 FROM departments WHERE id = ?", (dept_id,)).fetchone():
+    if role == "dept" and not dept_id:
+        raise ApiError(400, "บัญชีหน่วยงานต้องระบุหน่วยงาน")
+    if dept_id and not find_department(ctx.auth, ctx.user["session_system"], dept_id):
         raise ApiError(400, "ไม่พบหน่วยงานนี้")
     return text(body.get("full_name"), "ชื่อ-นามสกุล", True), role, dept_id, system
 
@@ -1642,8 +1677,8 @@ route("POST", "/logout", logout, public=True)
 route("GET", "/me", get_me)
 route("POST", "/me/password", change_password)
 BEFORE_PASSWORD_CHANGE.update({get_me, change_password})
-# เซสชัน รพ.สต. เรียกได้เฉพาะเส้นทางเหล่านี้ (ยังไม่มีข้อมูลอื่นของ รพ.สต.)
-PHC_ALLOWED = {list_users, create_user, update_user}
+# เส้นทางที่ใช้ฐานข้อมูลหลักเสมอ (บัญชีผู้ใช้/เซสชัน) เส้นทางอื่นใช้ฐานข้อมูลของระบบที่ล็อกอินเข้ามา
+AUTH_HANDLERS = {setup_status, setup, login, logout, get_me, change_password, list_users, create_user, update_user}
 route("GET", "/warehouses", list_warehouses)
 route("GET", "/departments", list_departments)
 route("POST", "/departments", save_department)
@@ -1772,10 +1807,15 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(401, "กรุณาเข้าสู่ระบบ")
                 if ctx.user and ctx.user["must_change_password"] and handler not in PUBLIC | BEFORE_PASSWORD_CHANGE:
                     raise ApiError(403, "กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน")
-                if ctx.user and ctx.user["session_system"] != "hospital" and handler not in PUBLIC | BEFORE_PASSWORD_CHANGE | PHC_ALLOWED:
-                    raise ApiError(403, "ระบบ รพ.สต. ยังไม่เปิดใช้ข้อมูล และเข้าถึงข้อมูลของ รพ. ไม่ได้")
+                system = ctx.user["session_system"] if ctx.user else "hospital"
+                if system != "hospital" and handler not in AUTH_HANDLERS:
+                    # ระบบ รพ.สต.: ข้อมูลทั้งหมดอยู่ในฐานข้อมูลของ รพ.สต. เข้าถึงข้อมูลของ รพ. ไม่ได้
+                    data = connect(system)
+                    mirror_user(data, ctx.user)
+                    conn.close()
+                    conn = ctx.conn = data
                 if ctx.user:
-                    record_activity(conn, ctx.user["id"])
+                    record_activity(ctx.conn, ctx.user["id"], system)
                 # ล็อกฐานข้อมูลตั้งแต่ต้นสำหรับคำสั่งที่เขียนข้อมูล กันการตัดสต็อกซ้อนกัน
                 conn.execute("BEGIN IMMEDIATE" if method != "GET" else "BEGIN")
                 result = handler(ctx, body, parse_qs(url.query), *args)
@@ -1868,16 +1908,18 @@ def backup():
     """สำรองฐานข้อมูลแบบปลอดภัยแม้ระบบกำลังทำงาน เก็บ 30 ไฟล์ล่าสุด"""
     init_db()
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    target = BACKUP_DIR / f"central-store-{datetime.now():%Y%m%d-%H%M%S}.db"
-    src, dst = connect(), sqlite3.connect(target)
-    try:
-        src.backup(dst)
-    finally:
-        dst.close()
-        src.close()
-    for old in sorted(BACKUP_DIR.glob("central-store-*.db"))[:-30]:
-        old.unlink()
-    print(f"สำรองข้อมูลแล้ว: {target}")
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+    for system, prefix in (("hospital", "central-store-"), ("phc", "central-store-phc-")):
+        target = BACKUP_DIR / f"{prefix}{stamp}.db"
+        src, dst = connect(system), sqlite3.connect(target)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+        for old in sorted(BACKUP_DIR.glob(f"{prefix}2*.db"))[:-30]:
+            old.unlink()
+        print(f"สำรองข้อมูลแล้ว: {target}")
 
 
 def reset_requisitions():
@@ -1946,7 +1988,7 @@ def main():
         sys.exit(1)
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '') else host}:{PORT}"
     print(f"งานบริหารเวชภัณฑ์ (คลังกลาง) กำลังทำงานที่ {url}  (กด Ctrl+C เพื่อหยุด)")
-    print(f"ฐานข้อมูล: {DB_PATH}")
+    print(f"ฐานข้อมูล: {DB_PATH} (รพ.สต.: {PHC_DB_PATH})")
     if host in ("0.0.0.0", ""):
         print("เปิดให้เครื่องอื่นในเครือข่ายเข้าได้ที่ http://<IP ของเครื่องนี้>:" + str(PORT))
     if "--open" in sys.argv:

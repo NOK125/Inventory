@@ -25,27 +25,10 @@ const maskId = (d) => fmtId(String(d).slice(0, 5) + "•".repeat(Math.max(0, Str
 let me = null;
 let unauthorized = () => {};
 
-// ช่องทาง รพ.สต.: ล็อกอินจริง หน้าตาเหมือนหน่วยงานของ รพ. แต่ยังไม่มีฐานข้อมูล ทุกหน้าว่างและบันทึกไม่ได้
-// (เซิร์ฟเวอร์ก็ปิดกั้นข้อมูลของ รพ. สำหรับเซสชัน รพ.สต. อยู่แล้ว)
+// ช่องทางที่ล็อกอินเข้ามา: true = รพ.สต. (ฐานข้อมูลแยกจาก รพ. ที่เซิร์ฟเวอร์)
 let phcMode = false;
-const PHC_LIVE = /^\/(me|me\/password|logout|users(\/\d+)?)$/; // เส้นทางที่ รพ.สต. ใช้ข้อมูลจริง
-const PHC_EMPTY = {
-  "/summary": () => ({ waiting: [] }),
-  "/analytics": () => ({
-    totals: { requisitions: 0, emergency: 0, lines_approved: 0, avg_hours: null, avg_hours_emergency: null },
-    weeks: [], by_warehouse: [], by_department: [], top_items: [], idle_items: [], idle_since: null, from: null, to: null,
-  }),
-};
-// บัญชีหน่วยงานของ รพ.สต. ยังไม่มีหน่วยงานในทะเบียน แสดงเป็น "รพ.สต."
-const asSession = (u) => (u?.session_system === "phc" && u.role !== "admin" ? { ...u, department_name: "รพ.สต." } : u);
-function phcApi(method, path) {
-  if (method !== "GET") return Promise.reject(new Error("ช่องทาง รพ.สต. อยู่ระหว่างจัดทำ ยังบันทึกข้อมูลไม่ได้"));
-  const empty = PHC_EMPTY[path.split("?")[0]];
-  return Promise.resolve(empty ? empty() : []);
-}
 
 async function api(method, path, body) {
-  if (phcMode && !PHC_LIVE.test(path)) return phcApi(method, path);
   const res = await fetch("/api" + path, {
     method,
     headers: body !== undefined ? { "Content-Type": "application/json" } : {},
@@ -1533,10 +1516,10 @@ async function usersView() {
   const [users, departments] = await Promise.all([api("GET", "/users"), api("GET", "/departments")]);
   view.innerHTML = `${pageHead("บัญชีผู้ใช้", { right: `<button type="button" class="btn primary" data-act="new">+ เพิ่มผู้ใช้</button>` })}
     <p class="hint">เข้าสู่ระบบด้วย <b>เลขบัตรประชาชน 13 หลัก</b> ครั้งแรกใช้รหัสผ่าน <b>เลข 5 ตัวท้ายของบัตร</b> แล้วระบบจะบังคับให้ตั้งรหัสผ่านใหม่ · ถ้าลืมรหัสผ่าน กด "แก้ไข" แล้วเลือกรีเซ็ตรหัสผ่าน · บัญชี <b>หน่วยงาน</b> เบิกสินค้าและดูได้เฉพาะใบเบิกของหน่วยงานตัวเอง บัญชี <b>ผู้ดูแลคลังกลาง</b> อนุมัติ จ่ายของ และจัดการสต็อกได้ · หน้านี้แสดงบัญชีของระบบ <b>${phcMode ? "รพ.สต." : "รพ."}</b> บัญชีหน่วยงานที่เพิ่มที่นี่เข้าได้เฉพาะระบบ ${phcMode ? "รพ.สต." : "รพ."} · ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ (ไม่เกิน 5 คน)</p>
-    <div class="list">${table(["เลขบัตรประชาชน", "ชื่อ-นามสกุล", "สิทธิ์", ...(phcMode ? [] : ["หน่วยงาน"]), "สถานะ", ""],
+    <div class="list">${table(["เลขบัตรประชาชน", "ชื่อ-นามสกุล", "สิทธิ์", "หน่วยงาน", "สถานะ", ""],
       users.map((u) => [`<span style="font-variant-numeric:tabular-nums">${esc(maskId(u.username))}</span>`, esc(u.full_name),
         u.role === "admin" ? badge("ผู้ดูแลคลังกลาง (ทั้ง 2 ระบบ)", "info") : `หน่วยงาน${phcMode ? " รพ.สต." : ""}`,
-        ...(phcMode ? [] : [esc(u.department_name || "-")]), u.active ? badge("ใช้งาน", "ok") : badge("ปิดใช้งาน", "muted"),
+        esc(u.department_name || "-"), u.active ? badge("ใช้งาน", "ok") : badge("ปิดใช้งาน", "muted"),
         actions(btn("edit", "แก้ไข", u.id))]), "ยังไม่มีผู้ใช้")}</div>`;
   const deptOptions = [["", "— ไม่ระบุ —"], ...departments.map((d) => [d.id, d.name + (d.active ? "" : " (ปิดใช้งาน)")])];
   const form = (u) => openForm({
@@ -1546,7 +1529,7 @@ async function usersView() {
         inputmode: "numeric", hint: "รหัสผ่านครั้งแรกคือเลข 5 ตัวท้ายของบัตร แล้วต้องตั้งรหัสใหม่" }]),
       { name: "full_name", label: "ชื่อ-นามสกุล", required: true },
       { name: "role", label: "สิทธิ์", type: "select", options: [["dept", phcMode ? "หน่วยงาน รพ.สต. (เบิกสินค้า)" : "หน่วยงาน (เบิกสินค้า)"], ["admin", "ผู้ดูแลคลังกลาง (ทั้ง 2 ระบบ)"]] },
-      ...(phcMode ? [] : [{ name: "department_id", label: "หน่วยงาน", type: "select", options: deptOptions, hint: "จำเป็นสำหรับสิทธิ์หน่วยงาน" }]),
+      { name: "department_id", label: "หน่วยงาน", type: "select", options: deptOptions, hint: `จำเป็นสำหรับสิทธิ์หน่วยงาน (จากทะเบียนหน่วยเบิกใน${phcMode ? "รพ.สต." : "รพ."})` },
       ...(u ? [{ name: "active", label: "สถานะ", type: "select", options: [["1", "ใช้งาน"], ["0", "ปิดใช้งาน"]] },
         { name: "reset_password", label: "รหัสผ่าน", type: "select", options: [["0", "ไม่เปลี่ยน"], ["1", "รีเซ็ตเป็นเลข 5 ตัวท้ายของบัตร (ผู้ใช้ต้องตั้งใหม่)"]],
           hint: "ใช้เมื่อผู้ใช้ลืมรหัสผ่าน · การบันทึกจะปลดล็อกบัญชีที่ใส่รหัสผิดหลายครั้งด้วย" }] : []),
@@ -1576,7 +1559,7 @@ async function analyticsView() {
   view.innerHTML = `${pageHead("Dashboard วิเคราะห์การเบิก", {
       over: `ข้อมูล ${a.weeks.length} สัปดาห์ล่าสุด · ${when(a.from, false)} – ${when(a.to, false)}`,
       right: `<div class="head-btns"><button type="button" class="btn outline" data-act="pdf"><span class="tag">PDF</span>ดาวน์โหลด PDF</button>
-        ${phcMode ? "" : `<a class="btn outline" href="/api/analytics/export" download><span class="tag">XLSX</span>ดาวน์โหลด Excel</a>`}</div>`,
+        <a class="btn outline" href="/api/analytics/export" download><span class="tag">XLSX</span>ดาวน์โหลด Excel</a></div>`,
     })}
     <div class="kpis">
       ${kpi("ใบเบิกทั้งหมด", num(t.requisitions), `เฉลี่ย ${num(Math.round(t.requisitions / Math.max(1, a.weeks.length)))} ใบ/สัปดาห์`)}
@@ -2088,12 +2071,11 @@ function refresh() {
 async function startApp(currentPassword = "") {
   phcMode = me.session_system === "phc";
   loginSystem = phcMode ? "phc" : "hospital";
-  me = asSession(me);
   if (me.must_change_password) return passwordScreen(currentPassword);
   document.body.classList.remove("auth");
   try { warehouses = await api("GET", "/warehouses"); } catch { warehouses = []; }
   $("#userbox").innerHTML = `<b>${esc(me.full_name)}</b>
-    <small>${esc(me.role === "admin" ? "ผู้ดูแลคลังกลาง (Admin)" : me.department_name || "")}</small>${phcMode ? `<small>ตัวอย่างหน้าจอ ยังไม่เชื่อมฐานข้อมูล</small>` : ""}
+    <small>${esc(me.role === "admin" ? "ผู้ดูแลคลังกลาง (Admin)" : me.department_name || "")}</small>${phcMode ? `<small>ระบบ รพ.สต.</small>` : ""}
     <button type="button" id="change-pw">เปลี่ยนรหัสผ่าน</button>
     <button type="button" id="logout">ออกจากระบบ</button>`;
   $("#logout").onclick = logout;
@@ -2101,7 +2083,7 @@ async function startApp(currentPassword = "") {
     title: "เปลี่ยนรหัสผ่าน",
     fields: passwordFields(),
     submitLabel: "บันทึกรหัสผ่านใหม่",
-    onSubmit: async (d) => { me = asSession(await savePassword(d)); toast("เปลี่ยนรหัสผ่านแล้ว เครื่องอื่นที่เข้าระบบค้างไว้จะถูกออกจากระบบ"); },
+    onSubmit: async (d) => { me = await savePassword(d); toast("เปลี่ยนรหัสผ่านแล้ว เครื่องอื่นที่เข้าระบบค้างไว้จะถูกออกจากระบบ"); },
   });
   current = null;
   await show(location.hash.slice(1));
