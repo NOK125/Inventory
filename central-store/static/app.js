@@ -1886,23 +1886,80 @@ const CREDIT = `<div class="credit"><b>Powered by Somruthai K.</b><small>© 2026
 
 // ---------- เข้าสู่ระบบ: เลขบัตรประชาชน 13 หลัก + รหัสผ่าน (ครั้งแรกคือ 5 ตัวท้าย แล้วต้องตั้งใหม่) ----------
 
-function authScreen(setupMode) {
+// แผงซ้ายของหน้าก่อนเข้าระบบ (ใช้ร่วมกันระหว่างหน้าเลือกช่องทางและหน้าเข้าสู่ระบบ)
+const loginBrand = (title, text) => `<div class="login-brand">
+      <img class="logo" src="logo.png" alt="โรงพยาบาลตาพระยา">
+      <div class="login-copy">
+        <small>โรงพยาบาลตาพระยา</small>
+        <h1>${title}</h1>
+        <p>${text}</p>
+      </div>
+      ${CREDIT}
+    </div>`;
+
+function clearShell() {
   document.body.classList.add("auth");
   $("#tabs").innerHTML = "";
   $("#userbox").innerHTML = "";
   view.onclick = view.onchange = view.oninput = view.onkeydown = null;
+}
+
+// หน้าแรก: เลือกช่องทางใช้งาน รพ. (ระบบเดิมทั้งหมด) หรือ รพ.สต. (ยังไม่เปิดใช้)
+function portalScreen() {
+  clearShell();
   view.innerHTML = `<div class="login">
-    <div class="login-brand">
-      <img class="logo" src="logo.png" alt="โรงพยาบาลตาพระยา">
-      <div class="login-copy">
-        <small>โรงพยาบาลตาพระยา</small>
-        <h1>งานบริหารเวชภัณฑ์<br>(คลังกลาง)</h1>
-        <p>เบิกยา เวชภัณฑ์ และพัสดุจากคลังกลางให้หน่วยงาน ติดตามสถานะใบเบิกได้ในที่เดียว</p>
+    ${loginBrand("งานบริหารเวชภัณฑ์<br>(คลังกลาง)", "เลือกช่องทางการใช้งานของหน่วยงานคุณ")}
+    <div class="login-main">
+      <div class="login-form">
+        <div><h2>เลือกช่องทางการใช้งาน</h2>
+          <span class="sub">ระบบเบิกเวชภัณฑ์และพัสดุจากคลังกลาง รพ.ตาพระยา</span></div>
+        <div class="portals">
+          <button type="button" class="portal" data-portal="hospital">
+            <b>ใช้งานโดย รพ.</b>
+            <small>หน่วยงานภายในโรงพยาบาลตาพระยา และเจ้าหน้าที่คลังกลาง</small>
+          </button>
+          <button type="button" class="portal" data-portal="phc">
+            <b>ใช้งานโดย รพ.สต.</b>
+            <small>โรงพยาบาลส่งเสริมสุขภาพตำบลในเครือข่าย</small>
+          </button>
+        </div>
       </div>
-      ${CREDIT}
     </div>
+  </div>`;
+  view.onclick = (e) => {
+    const b = e.target.closest("[data-portal]");
+    if (!b) return;
+    if (b.dataset.portal === "hospital") authScreen(false);
+    else phcScreen();
+  };
+  $(".portal").focus();
+}
+
+// ช่องทาง รพ.สต. เว้นไว้ก่อน
+function phcScreen() {
+  clearShell();
+  view.innerHTML = `<div class="login">
+    ${loginBrand("งานบริหารเวชภัณฑ์<br>สำหรับ รพ.สต.", "ช่องทางสำหรับโรงพยาบาลส่งเสริมสุขภาพตำบลในเครือข่าย")}
+    <div class="login-main">
+      <div class="login-form">
+        <div><h2>ใช้งานโดย รพ.สต.</h2>
+          <span class="sub">ระบบส่วนนี้อยู่ระหว่างจัดทำ ยังไม่เปิดให้ใช้งาน</span></div>
+        <p class="hint">หากต้องการเบิกเวชภัณฑ์ในระหว่างนี้ กรุณาติดต่อเจ้าหน้าที่คลังกลาง รพ.ตาพระยา</p>
+        <button type="button" class="btn outline block" id="back-portal">กลับไปเลือกช่องทาง</button>
+      </div>
+    </div>
+  </div>`;
+  $("#back-portal").onclick = portalScreen;
+  $("#back-portal").focus();
+}
+
+function authScreen(setupMode) {
+  clearShell();
+  view.innerHTML = `<div class="login">
+    ${loginBrand("งานบริหารเวชภัณฑ์<br>(คลังกลาง)", "เบิกยา เวชภัณฑ์ และพัสดุจากคลังกลางให้หน่วยงาน ติดตามสถานะใบเบิกได้ในที่เดียว")}
     <div class="login-main">
       <form class="login-form" id="auth-form" novalidate>
+        ${setupMode ? "" : `<button type="button" class="link back-portal" id="back-portal">← เลือกช่องทางอื่น</button>`}
         <div><h2>${setupMode ? "ตั้งค่าระบบครั้งแรก" : "เข้าสู่ระบบ"}</h2>
           <span class="sub">${setupMode ? "สร้างบัญชีผู้ดูแลคลังกลางคนแรก" : "ใช้เลขบัตรประจำตัวประชาชนของเจ้าหน้าที่"}</span></div>
         ${setupMode ? fieldHtml({ name: "full_name", label: "ชื่อ-นามสกุล", required: true }) : ""}
@@ -1941,6 +1998,7 @@ function authScreen(setupMode) {
       e.target.setAttribute("aria-pressed", String(show));
     };
   }
+  if (!setupMode) $("#back-portal").onclick = portalScreen;
   $("input", form).focus();
   form.onsubmit = async (e) => {
     e.preventDefault();
@@ -2046,7 +2104,7 @@ async function logout() {
   current = null;
   resetFlow();
   history.replaceState(null, "", location.pathname + location.search);
-  authScreen(false);
+  portalScreen();
 }
 
 // ---------- รหัสผ่าน ----------
@@ -2068,10 +2126,7 @@ async function savePassword(d) {
 
 // บัญชีที่ยังใช้รหัสเริ่มต้น (5 ตัวท้ายของบัตร) ต้องตั้งรหัสใหม่ก่อนใช้งาน
 function passwordScreen(current) {
-  document.body.classList.add("auth");
-  $("#tabs").innerHTML = "";
-  $("#userbox").innerHTML = "";
-  view.onclick = view.onchange = view.oninput = view.onkeydown = null;
+  clearShell();
   view.innerHTML = `<div class="login">
     <div class="login-brand"><img class="logo" src="logo.png" alt="โรงพยาบาลตาพระยา">
       <div class="login-copy"><small>โรงพยาบาลตาพระยา</small><h1>งานบริหารเวชภัณฑ์<br>(คลังกลาง)</h1>
@@ -2131,6 +2186,6 @@ window.addEventListener("hashchange", () => { if (location.hash.slice(1) !== cur
     await startApp();
   } catch {
     me = null;
-    authScreen(false);
+    portalScreen();
   }
 })();

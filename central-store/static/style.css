@@ -575,6 +575,16 @@ body.auth main { padding: 0; }
 .pw button { border: 0; background: none; color: var(--primary); font-weight: 600; font-size: 13.5px; padding: 0 14px; height: 44px; cursor: pointer; }
 .login-form .btn.primary { padding: 13px; font-size: 16px; border-radius: 10px; }
 .login-form .form-error { margin: 0; }
+.login-form .back-portal { justify-self: start; }
+.portals { display: grid; gap: 12px; }
+.portal {
+  display: grid; gap: 4px; text-align: left; width: 100%; cursor: pointer;
+  padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit;
+}
+.portal:hover, .portal:focus-visible { border-color: var(--primary); background: var(--soft); }
+.portal b { font-size: 18px; color: var(--primary); }
+.portal small { font-size: 14px; color: var(--muted); line-height: 1.5; }
 .center { text-align: center; }
 
 #toast {
