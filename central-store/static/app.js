@@ -1767,18 +1767,32 @@ async function guidelinesView() {
       sub: "ประกาศ ขั้นตอน และเอกสารจากงานบริหารเวชภัณฑ์ (คลังกลาง)",
       right: admin ? `<button type="button" class="btn primary" data-act="add">+ เพิ่มประกาศ</button>` : "",
     })}
-    <div class="stack">${list.length ? list.map((g) => `<article class="panel pad guide">
-        <div class="guide-head"><h2>${esc(g.title)}</h2>
-          <small>ประกาศ ${when(g.created_at)}${g.created_by_name ? ` · ${esc(g.created_by_name)}` : ""}</small></div>
-        ${g.body ? `<p class="guide-body">${esc(g.body)}</p>` : ""}
-        ${g.file_name ? `<iframe class="guide-pdf" src="/api/guidelines/${g.id}/file#navpanes=0&view=FitH" title="${esc(g.file_name)}" loading="lazy"></iframe>` : ""}
+    ${list.length ? `<div class="panel guide-list">${list.map((g) => `<div class="guide-row">
+        <button type="button" class="guide-main" data-act="open" data-id="${g.id}" title="เปิดอ่าน">
+          <span class="tag ${g.file_name ? "" : "text"}">${g.file_name ? "PDF" : "ข้อความ"}</span>
+          <span class="guide-text"><b>${esc(g.title)}</b>
+            <small>ประกาศ ${when(g.created_at)}${g.created_by_name ? ` · ${esc(g.created_by_name)}` : ""}${g.file_name ? ` · ${fileSize(g.file_size)}` : ""}</small>
+            ${g.body ? `<span class="guide-snippet">${esc(g.body)}</span>` : ""}</span>
+        </button>
         <div class="guide-actions">
-          ${g.file_name ? `<a class="btn outline" href="/api/guidelines/${g.id}/file" target="_blank" rel="noopener" title="เปิดเต็มจอในแท็บใหม่ หรือดาวน์โหลด">
-            <span class="tag">PDF</span><span class="guide-file">${esc(g.file_name)}</span><small>${fileSize(g.file_size)} · เปิดเต็มจอ</small></a>` : ""}
-          ${admin ? `<button type="button" class="btn small danger" data-act="del" data-id="${g.id}">ลบประกาศ</button>` : ""}
-        </div></article>`).join("") : `<p class="empty panel">ยังไม่มีประกาศ${admin ? ` กด "+ เพิ่มประกาศ" เพื่อเริ่ม` : ""}</p>`}</div>`;
+          <button type="button" class="btn small outline" data-act="open" data-id="${g.id}">เปิดอ่าน</button>
+          ${g.file_name ? `<a class="btn small" href="/api/guidelines/${g.id}/file" target="_blank" rel="noopener" title="เปิดไฟล์ PDF ในแท็บใหม่ หรือดาวน์โหลด">แท็บใหม่</a>` : ""}
+          ${admin ? `<button type="button" class="btn small danger" data-act="del" data-id="${g.id}">ลบ</button>` : ""}
+        </div></div>`).join("")}</div>`
+      : `<p class="empty panel">ยังไม่มีประกาศ${admin ? ` กด "+ เพิ่มประกาศ" เพื่อเริ่ม` : ""}</p>`}`;
   bind({
     add: () => addGuideline(),
+    // เปิดอ่านในหน้าต่าง: รายละเอียดเต็ม และไฟล์ PDF
+    open: (id) => {
+      const g = list.find((x) => String(x.id) === String(id));
+      dlg.className = "wide";
+      dlg.innerHTML = dialogShell(esc(g.title), `<small>ประกาศ ${when(g.created_at)}${g.created_by_name ? ` · ${esc(g.created_by_name)}` : ""}</small>
+        ${g.body ? `<p class="guide-body">${esc(g.body)}</p>` : ""}
+        ${g.file_name ? `<iframe class="guide-pdf" src="/api/guidelines/${g.id}/file#navpanes=0&view=FitH" title="${esc(g.file_name)}"></iframe>
+          <p class="guide-open"><a class="link" href="/api/guidelines/${g.id}/file" target="_blank" rel="noopener">เปิด ${esc(g.file_name)} ในแท็บใหม่ / ดาวน์โหลด</a></p>` : ""}`,
+        null, "ปิด");
+      wireDialog(() => {});
+    },
     del: async (id) => {
       const g = list.find((x) => String(x.id) === String(id));
       if (!confirm(`ลบประกาศ "${g.title}"?${g.file_name ? " ไฟล์ PDF จะถูกลบด้วย" : ""}`)) return;
