@@ -25,7 +25,22 @@ const maskId = (d) => fmtId(String(d).slice(0, 5) + "•".repeat(Math.max(0, Str
 let me = null;
 let unauthorized = () => {};
 
+// ช่องทาง รพ.สต.: หน้าตาเหมือน รพ. แต่ไม่เชื่อมฐานข้อมูล ทุกหน้าว่างและบันทึกไม่ได้
+let phcMode = false;
+const PHC_EMPTY = {
+  "/analytics": () => ({
+    totals: { requisitions: 0, emergency: 0, lines_approved: 0, avg_hours: null, avg_hours_emergency: null },
+    weeks: [], by_warehouse: [], by_department: [], top_items: [], idle_items: [], idle_since: null, from: null, to: null,
+  }),
+};
+function phcApi(method, path) {
+  if (method !== "GET") return Promise.reject(new Error("ช่องทาง รพ.สต. อยู่ระหว่างจัดทำ ยังบันทึกข้อมูลไม่ได้"));
+  const empty = PHC_EMPTY[path.split("?")[0]];
+  return Promise.resolve(empty ? empty() : []);
+}
+
 async function api(method, path, body) {
+  if (phcMode) return phcApi(method, path);
   const res = await fetch("/api" + path, {
     method,
     headers: body !== undefined ? { "Content-Type": "application/json" } : {},
@@ -1556,7 +1571,7 @@ async function analyticsView() {
   view.innerHTML = `${pageHead("Dashboard วิเคราะห์การเบิก", {
       over: `ข้อมูล ${a.weeks.length} สัปดาห์ล่าสุด · ${when(a.from, false)} – ${when(a.to, false)}`,
       right: `<div class="head-btns"><button type="button" class="btn outline" data-act="pdf"><span class="tag">PDF</span>ดาวน์โหลด PDF</button>
-        <a class="btn outline" href="/api/analytics/export" download><span class="tag">XLSX</span>ดาวน์โหลด Excel</a></div>`,
+        ${phcMode ? "" : `<a class="btn outline" href="/api/analytics/export" download><span class="tag">XLSX</span>ดาวน์โหลด Excel</a>`}</div>`,
     })}
     <div class="kpis">
       ${kpi("ใบเบิกทั้งหมด", num(t.requisitions), `เฉลี่ย ${num(Math.round(t.requisitions / Math.max(1, a.weeks.length)))} ใบ/สัปดาห์`)}
@@ -1935,22 +1950,12 @@ function portalScreen() {
   $(".portal").focus();
 }
 
-// ช่องทาง รพ.สต. เว้นไว้ก่อน
-function phcScreen() {
-  clearShell();
-  view.innerHTML = `<div class="login">
-    ${loginBrand("งานบริหารเวชภัณฑ์<br>สำหรับ รพ.สต.", "ช่องทางสำหรับโรงพยาบาลส่งเสริมสุขภาพตำบลในเครือข่าย")}
-    <div class="login-main">
-      <div class="login-form">
-        <div><h2>ใช้งานโดย รพ.สต.</h2>
-          <span class="sub">ระบบส่วนนี้อยู่ระหว่างจัดทำ ยังไม่เปิดให้ใช้งาน</span></div>
-        <p class="hint">หากต้องการเบิกเวชภัณฑ์ในระหว่างนี้ กรุณาติดต่อเจ้าหน้าที่คลังกลาง รพ.ตาพระยา</p>
-        <button type="button" class="btn outline block" id="back-portal">กลับไปเลือกช่องทาง</button>
-      </div>
-    </div>
-  </div>`;
-  $("#back-portal").onclick = portalScreen;
-  $("#back-portal").focus();
+// ช่องทาง รพ.สต.: เข้าใช้ได้ทันทีโดยไม่ต้องล็อกอิน เมนูแบบหน่วยงาน แต่ยังไม่มีข้อมูล
+async function phcScreen() {
+  phcMode = true;
+  me = { id: 0, role: "dept", full_name: "ผู้ใช้งาน รพ.สต.", department_name: "รพ.สต.", must_change_password: false };
+  history.replaceState(null, "", location.pathname + location.search);
+  await startApp();
 }
 
 function authScreen(setupMode) {
@@ -2084,11 +2089,11 @@ async function startApp(currentPassword = "") {
   document.body.classList.remove("auth");
   try { warehouses = await api("GET", "/warehouses"); } catch { warehouses = []; }
   $("#userbox").innerHTML = `<b>${esc(me.full_name)}</b>
-    <small>${esc(me.role === "admin" ? "ผู้ดูแลคลังกลาง (Admin)" : me.department_name || "")}</small>
-    <button type="button" id="change-pw">เปลี่ยนรหัสผ่าน</button>
-    <button type="button" id="logout">ออกจากระบบ</button>`;
+    <small>${esc(me.role === "admin" ? "ผู้ดูแลคลังกลาง (Admin)" : me.department_name || "")}</small>${phcMode ? `<small>ตัวอย่างหน้าจอ ยังไม่เชื่อมฐานข้อมูล</small>` : ""}
+    ${phcMode ? "" : `<button type="button" id="change-pw">เปลี่ยนรหัสผ่าน</button>`}
+    <button type="button" id="logout">${phcMode ? "กลับไปเลือกช่องทาง" : "ออกจากระบบ"}</button>`;
   $("#logout").onclick = logout;
-  $("#change-pw").onclick = () => openForm({
+  if (!phcMode) $("#change-pw").onclick = () => openForm({
     title: "เปลี่ยนรหัสผ่าน",
     fields: passwordFields(),
     submitLabel: "บันทึกรหัสผ่านใหม่",
@@ -2099,7 +2104,8 @@ async function startApp(currentPassword = "") {
 }
 
 async function logout() {
-  try { await api("POST", "/logout", {}); } catch {}
+  if (!phcMode) try { await api("POST", "/logout", {}); } catch {}
+  phcMode = false;
   me = null;
   current = null;
   resetFlow();
