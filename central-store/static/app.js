@@ -228,24 +228,63 @@ function infoGrid(doc) {
   ${doc.reject_reason ? `<p class="form-error"><b>เหตุผลที่ไม่อนุมัติ:</b> ${esc(doc.reject_reason)}</p>` : ""}`;
 }
 
-// mode: view | approve | issue
+// เงินบาท 2 ตำแหน่ง
+const baht = (v) => (v == null || v === "" || Number.isNaN(Number(v)) ? "-"
+  : Number(v).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+// ระบบ รพ.สต.: ราคาต่อหน่วยและมูลค่า (ราคาต่อหน่วย × จำนวนจ่ายจริง)
+const priced = (doc) => phcMode && ["approved", "issued"].includes(doc.status);
+const lineValue = (price, qty) => (price == null || price === "" || qty == null || qty === "" ? null : Number(price) * Number(qty));
+const docTotal = (doc) => doc.lines.reduce((sum, l) => sum + (lineValue(l.unit_price, l.qty_issued) || 0), 0);
+
+// mode: view | approve | issue | price
 function linesTable(doc, mode) {
   const admin = me.role === "admin";
   const input = (line, field, value, max) =>
     `<input class="qty-input" type="number" step="any" min="0" max="${max}" data-line="${line.id}" data-field="${field}" value="${value}" required aria-label="${esc(line.name)}">`;
   const headers = ["#", "คลัง", "รหัส", "รายการ", "หน่วย", ["ขอเบิก", "num"], ["อนุมัติ", "num"], ["จ่ายจริง", "num"]];
+  const showPrice = priced(doc) && (mode !== "view" || doc.status === "issued");
+  if (showPrice) headers.push(["ราคาต่อหน่วย (บาท)", "num"], ["มูลค่า (บาท)", "num"]);
   if (admin && doc.status !== "issued") headers.push(["คงเหลือในคลัง", "num"]);
-  return table(headers, doc.lines.map((l, i) => {
+  const editPrice = showPrice && (mode === "issue" || mode === "price");
+  const rowsHtml = doc.lines.map((l, i) => {
     const approved = mode === "approve" ? input(l, "qty_approved", l.qty_requested, l.qty_requested) : num(l.qty_approved);
     // จ่ายจริงเริ่มต้นเท่าจำนวนอนุมัติ ถ้าคงเหลือไม่พอ เซิร์ฟเวอร์ตัดสต็อกได้แค่ถึง 0 และบันทึกส่วนที่ขาดในประวัติ
     const issued = mode === "issue" ? input(l, "qty_issued", l.qty_approved, l.qty_approved) : num(l.qty_issued);
     const cells = [i + 1, esc(l.warehouse_name || "-"), esc(l.code), esc(l.name), esc(l.unit), [num(l.qty_requested), "num"], [approved, "num"], [issued, "num"]];
+    if (showPrice) {
+      const price = l.unit_price ?? (mode === "issue" ? l.last_price : null) ?? "";
+      const qty = mode === "issue" ? l.qty_approved : l.qty_issued;
+      cells.push([editPrice ? `<input class="price-input" type="number" step="0.01" min="0" data-line="${l.id}" value="${price}"
+          placeholder="0.00" aria-label="ราคาต่อหน่วยของ ${esc(l.name)}">` : baht(price), "num"],
+        [`<span class="line-value" data-line="${l.id}">${baht(lineValue(price, qty))}</span>`, "num"]);
+    }
     if (admin && doc.status !== "issued") {
       const need = mode === "issue" || doc.status === "approved" ? l.qty_approved : l.qty_requested;
       cells.push([`<span class="${l.stock < need ? "minus" : ""}">${num(l.stock)}</span>`, "num"]);
     }
     return cells;
-  }), "ไม่มีรายการ");
+  });
+  const total = showPrice ? `<p class="value-total">รวมมูลค่า <b id="value-total">${baht(editPrice ? 0 : docTotal(doc))}</b> บาท</p>` : "";
+  return table(headers, rowsHtml, "ไม่มีรายการ") + total;
+}
+
+// คำนวณมูลค่าใหม่ทันทีเมื่อแก้ราคาหรือจำนวนจ่ายจริง
+function wireValues(form, doc) {
+  const calc = () => {
+    let total = 0;
+    for (const l of doc.lines) {
+      const price = $(`.price-input[data-line="${l.id}"]`, form)?.value;
+      const qty = $(`.qty-input[data-line="${l.id}"][data-field="qty_issued"]`, form)?.value ?? l.qty_issued;
+      const v = lineValue(price, qty);
+      const cell = $(`.line-value[data-line="${l.id}"]`, form);
+      if (cell) cell.textContent = baht(v);
+      total += v || 0;
+    }
+    const t = $("#value-total", form);
+    if (t) t.textContent = baht(total);
+  };
+  form.addEventListener("input", calc);
+  calc();
 }
 
 // ช่องเลือกชื่อจากทะเบียน ค่าที่ส่งคือชื่อ-นามสกุล ตำแหน่งดึงจากทะเบียน
@@ -326,6 +365,9 @@ async function openRequisition(id, mode = "view") {
       ${personSelect("receiver_name", "ผู้รับของ", receivers, doc.receiver_name || "", "คนที่มารับของจากคลัง · จากทะเบียนผู้รับสินค้า")}
     </div>`;
     submit = "ยืนยันจ่ายของ (ตัดสต็อก)";
+  } else if (mode === "price") {
+    body += `<p class="hint">แก้ราคาต่อหน่วยได้ทุกเมื่อ มูลค่าคำนวณจากราคาต่อหน่วย × จำนวนจ่ายจริง · ไม่เปลี่ยนจำนวนหรือสต็อก</p>`;
+    submit = "บันทึกราคา";
   } else {
     const buttons = [];
     if (admin && doc.status === "pending") buttons.push(btn("approve", "อนุมัติ", "", "primary"), btn("reject", "ไม่อนุมัติ", "", "danger"));
@@ -333,14 +375,25 @@ async function openRequisition(id, mode = "view") {
     if (!admin && doc.status === "pending") buttons.push(btn("edit", "แก้ไขใบเบิก", "", "outline"));
     if (doc.status === "pending") buttons.push(btn("cancel", "ยกเลิกใบเบิก", "", "danger"));
     if (admin && doc.status !== "cancelled") buttons.push(btn("people", "แก้ไขชื่อ/ตำแหน่ง", "", "outline"));
+    if (admin && phcMode && doc.status === "issued") buttons.push(btn("price", "แก้ไขราคา", "", "outline"));
     buttons.push(btn("print", "พิมพ์ใบเบิก"));
     body += `<div class="doc-actions">${buttons.join("")}</div>`;
   }
 
   dlg.className = "wide";
-  dlg.innerHTML = dialogShell(title, body, submit, mode === "view" ? "ปิด" : "ย้อนกลับ");
+  dlg.innerHTML = dialogShell(mode === "price" ? `แก้ไขราคา · ${esc(doc.doc_no)}` : title, body, submit, mode === "view" ? "ปิด" : "ย้อนกลับ");
   const form = wireDialog(async (d, f) => {
     const lines = $$(".qty-input", f).map((i) => ({ line_id: i.dataset.line, [i.dataset.field]: i.value }));
+    for (const p of $$(".price-input", f)) {
+      const line = lines.find((x) => x.line_id === p.dataset.line);
+      if (line) line.unit_price = p.value; else lines.push({ line_id: p.dataset.line, unit_price: p.value });
+    }
+    if (mode === "price") {
+      await api("POST", `/requisitions/${id}/prices`, { lines });
+      toast("บันทึกราคาต่อหน่วยแล้ว");
+      refresh();
+      return setTimeout(() => openRequisition(id));
+    }
     if (mode === "approve") {
       await api("POST", `/requisitions/${id}/approve`, { approver_name: d.approver_name,
         approver_position: positionOf(central, d.approver_name, doc.approver_position), lines });
@@ -353,17 +406,18 @@ async function openRequisition(id, mode = "view") {
     }
     refresh();
   });
+  if (priced(doc) && (mode === "issue" || mode === "price")) wireValues(form, doc);
   if (mode !== "view") {
     // "ย้อนกลับ" กลับไปหน้ารายละเอียดแทนการปิด
     $("[data-cancel]", form).onclick = () => openRequisition(id);
-    $(".qty-input", form)?.focus();
+    $(mode === "price" ? ".price-input" : ".qty-input", form)?.focus();
     return;
   }
   form.onclick = async (e) => {
     const b = e.target.closest("[data-act]");
     if (!b) return;
     const act = b.dataset.act;
-    if (act === "approve" || act === "issue") return openRequisition(id, act);
+    if (act === "approve" || act === "issue" || act === "price") return openRequisition(id, act);
     if (act === "print") return printRequisition(doc);
     if (act === "people") return editPeople(doc);
     if (act === "edit") return startEdit(doc.id);
@@ -397,6 +451,7 @@ function printRequisition(doc) {
       <div>วันที่ ${ts ? when(ts, false) : "......../......../........"}</div>
     </div>`;
   const rejected = doc.status === "rejected";
+  const money = phcMode && doc.status === "issued";
   $("#print").innerHTML = `
     <h1>ใบเบิกวัสดุ</h1>
     <p class="center">งานบริหารเวชภัณฑ์ (คลังกลาง) โรงพยาบาลตาพระยา<br>โทร 037-269009 ต่อ 1403</p>
@@ -408,10 +463,11 @@ function printRequisition(doc) {
       <div><b>สถานะ:</b> ${esc(STATUS[doc.status][0])}</div>
     </div>
     <table>
-      <thead><tr><th>ลำดับ</th><th>คลัง</th><th>รหัส</th><th>รายการ</th><th>หน่วย</th><th class="num">ขอเบิก</th><th class="num">อนุมัติ</th><th class="num">จ่ายจริง</th></tr></thead>
+      <thead><tr><th>ลำดับ</th><th>คลัง</th><th>รหัส</th><th>รายการ</th><th>หน่วย</th><th class="num">ขอเบิก</th><th class="num">อนุมัติ</th><th class="num">จ่ายจริง</th>${money ? `<th class="num">ราคาต่อหน่วย (บาท)</th><th class="num">มูลค่า (บาท)</th>` : ""}</tr></thead>
       <tbody>${doc.lines.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.warehouse_name || "")}</td><td>${esc(l.code)}</td><td>${esc(l.name)}</td><td>${esc(l.unit)}</td>
         <td class="num">${num(l.qty_requested)}</td><td class="num">${l.qty_approved == null ? "" : num(l.qty_approved)}</td>
-        <td class="num">${l.qty_issued == null ? "" : num(l.qty_issued)}</td></tr>`).join("")}</tbody>
+        <td class="num">${l.qty_issued == null ? "" : num(l.qty_issued)}</td>${money ? `<td class="num">${baht(l.unit_price)}</td><td class="num">${baht(lineValue(l.unit_price, l.qty_issued))}</td>` : ""}</tr>`).join("")}</tbody>
+      ${money ? `<tfoot><tr><td colspan="9" class="num"><b>รวมมูลค่า</b></td><td class="num"><b>${baht(docTotal(doc))}</b></td></tr></tfoot>` : ""}
     </table>
     ${doc.note ? `<p><b>หมายเหตุถึงคลังกลาง:</b> ${esc(doc.note)}</p>` : ""}
     <div class="signs">

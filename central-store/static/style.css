@@ -445,6 +445,9 @@ input:disabled { background: var(--chip); color: var(--muted); }
 .matrix .qty-input { width: 100%; max-width: 74px; height: 32px; border-radius: 7px; text-align: right; padding: 0 8px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .matrix .qty-input.changed { border-color: var(--warn-line); color: var(--warn); }
 .matrix .qty-input:disabled { background: var(--info-soft); border-color: var(--info-line); color: var(--text); }
+.price-input { width: 110px; max-width: 100%; height: 32px; border-radius: 7px; text-align: right; padding: 0 8px; font-variant-numeric: tabular-nums; }
+.value-total { text-align: right; margin: 8px 0 0; font-size: 15px; }
+.value-total b { font-size: 17px; color: var(--primary); font-variant-numeric: tabular-nums; }
 .matrix td.cell small, .matrix td.tot small { display: block; font-size: 11px; }
 .matrix td.none { text-align: right; color: var(--faint); }
 .matrix td.item-name span { display: block; font-size: 14px; font-weight: 500; }

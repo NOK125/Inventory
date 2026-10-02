@@ -262,6 +262,9 @@ def init_one(system):
         # แยกระบบ รพ. / รพ.สต.: บัญชีเดิมทั้งหมดเป็นของ รพ. (ผู้ดูแลคลังกลางเข้าได้ทั้ง 2 ระบบ)
         if "system" not in cols:
             conn.execute("ALTER TABLE users ADD COLUMN system TEXT NOT NULL DEFAULT 'hospital'")
+        # ราคาต่อหน่วย (บาท) ของรายการที่จ่าย ใช้ในระบบ รพ.สต.
+        if "unit_price" not in {r["name"] for r in conn.execute("PRAGMA table_info(lines)")}:
+            conn.execute("ALTER TABLE lines ADD COLUMN unit_price REAL")
         if "system" not in {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}:
             conn.execute("ALTER TABLE sessions ADD COLUMN system TEXT NOT NULL DEFAULT 'hospital'")
         # เพิ่มคลังตั้งต้นที่ยังไม่มี (ฐานข้อมูลเดิมได้คลังใหม่อัตโนมัติ ไม่แตะคลังที่มีอยู่)
@@ -1062,7 +1065,10 @@ def get_req(ctx, req_id):
     doc = one(ctx.conn, REQ_SQL + " WHERE r.id = ?", (req_id,))
     if not doc or (not ctx.admin and doc["department_id"] != ctx.user["department_id"]):
         raise ApiError(404, "ไม่พบใบเบิกนี้")
-    doc["lines"] = rows(ctx.conn.execute("""SELECT l.*, i.code, i.name, i.unit, i.qty AS stock, i.warehouse_id, w.name AS warehouse_name
+    # last_price: ราคาต่อหน่วยล่าสุดของสินค้านี้จากใบเบิกอื่น ใช้เป็นค่าตั้งต้นตอนจ่าย
+    doc["lines"] = rows(ctx.conn.execute("""SELECT l.*, i.code, i.name, i.unit, i.qty AS stock, i.warehouse_id, w.name AS warehouse_name,
+        (SELECT p.unit_price FROM lines p WHERE p.item_id = l.item_id AND p.unit_price IS NOT NULL AND p.id != l.id
+         ORDER BY p.id DESC LIMIT 1) AS last_price
         FROM lines l JOIN items i ON i.id = l.item_id JOIN warehouses w ON w.id = i.warehouse_id
         WHERE l.requisition_id = ? ORDER BY i.warehouse_id, i.code""", (req_id,)))
     with_summary(ctx.conn, [doc])
@@ -1415,6 +1421,7 @@ def issue_requisition(ctx, body, query, req_id):
     issuer = text(body.get("issuer_name"), "ชื่อผู้จ่าย", True)
     receiver = text(body.get("receiver_name"), "ชื่อผู้รับ", True)
     qty = line_qty(doc, body.get("lines"), "qty_issued", "qty_approved")
+    save_prices(ctx, doc, body.get("lines"))
     # จ่ายได้ตามจำนวนที่ต้องการแม้คงเหลือในระบบไม่พอ: คงเหลือหยุดที่ 0 ไม่ติดลบ และประวัติสต็อกบันทึกส่วนที่ขาด
     for l in doc["lines"]:
         ctx.conn.execute("UPDATE lines SET qty_issued = ? WHERE id = ?", (qty[l["id"]], l["id"]))
@@ -1424,6 +1431,28 @@ def issue_requisition(ctx, body, query, req_id):
     ctx.conn.execute("""UPDATE requisitions SET status = 'issued', issuer_name = ?, issuer_position = ?, receiver_name = ?, receiver_position = ?,
                         issued_at = ? WHERE id = ?""", (issuer, text(body.get("issuer_position"), "ตำแหน่ง"), receiver,
                                                        text(body.get("receiver_position"), "ตำแหน่ง"), now(), req_id))
+    return get_req(ctx, req_id)
+
+
+def save_prices(ctx, doc, entries):
+    """ราคาต่อหน่วย (บาท) ของแต่ละรายการ เฉพาะระบบ รพ.สต. เว้นว่างได้ มูลค่า = ราคาต่อหน่วย × จำนวนจ่ายจริง"""
+    if ctx.user["session_system"] != "phc":
+        return
+    ids = {l["id"] for l in doc["lines"]}
+    for e in entries or []:
+        if isinstance(e, dict) and "unit_price" in e and str(e.get("line_id", "")).isdigit() and int(e["line_id"]) in ids:
+            price = number(e.get("unit_price"), "ราคาต่อหน่วย", minimum=0)
+            ctx.conn.execute("UPDATE lines SET unit_price = ? WHERE id = ?", (price, int(e["line_id"])))
+
+
+def set_requisition_prices(ctx, body, query, req_id):
+    """ผู้ดูแลแก้ราคาต่อหน่วยของใบเบิกที่จ่ายแล้วได้ทุกเมื่อ (ไม่แตะจำนวนหรือสต็อก)"""
+    ctx.require_admin()
+    if ctx.user["session_system"] != "phc":
+        raise ApiError(400, "ราคาต่อหน่วยใช้ได้เฉพาะระบบ รพ.สต.")
+    doc = get_req(ctx, req_id)
+    require_status(doc, "issued")
+    save_prices(ctx, doc, body.get("lines"))
     return get_req(ctx, req_id)
 
 
@@ -1721,6 +1750,7 @@ route("POST", "/issues", create_issue)
 route("POST", f"/issues/{ID}/reply", reply_issue)
 route("POST", f"/requisitions/{ID}/reject", reject_requisition)
 route("POST", f"/requisitions/{ID}/issue", issue_requisition)
+route("POST", f"/requisitions/{ID}/prices", set_requisition_prices)
 route("GET", "/summary", summary)
 route("GET", "/analytics", analytics)
 route("GET", "/analytics/export", analytics_export)
