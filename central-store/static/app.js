@@ -252,7 +252,8 @@ function linesTable(doc, mode) {
     const issued = mode === "issue" ? input(l, "qty_issued", l.qty_approved, l.qty_approved) : num(l.qty_issued);
     const cells = [i + 1, esc(l.warehouse_name || "-"), esc(l.code), esc(l.name), esc(l.unit), [num(l.qty_requested), "num"], [approved, "num"], [issued, "num"]];
     if (showPrice) {
-      const price = l.unit_price ?? (mode === "issue" ? l.last_price : null) ?? "";
+      // ราคาตั้งต้นตอนจ่าย: ราคาในหน่วยย่อย (เบิก) ของสินค้า แล้วค่อยใช้ราคาล่าสุดที่เคยจ่าย
+      const price = l.unit_price ?? (mode === "issue" ? l.item_price ?? l.last_price : null) ?? "";
       const qty = mode === "issue" ? l.qty_approved : l.qty_issued;
       cells.push([editPrice ? `<input class="price-input" type="number" step="0.01" min="0" data-line="${l.id}" value="${price}"
           placeholder="0.00" aria-label="ราคาต่อหน่วยของ ${esc(l.name)}">` : baht(price), "num"],
@@ -1243,9 +1244,11 @@ async function itemsView() {
     const q = $("#q").value.trim().toLowerCase();
     const wh = $("#wh").value;
     $("#list").innerHTML = table(
-      ["รหัส", "รายการ", "คลัง", "หน่วย", ["คงเหลือ", "num"], ["จุดสั่งซื้อ", "num"], "สถานะ", ""],
+      ["รหัส", "รายการ", "คลัง", phcMode ? "หน่วยย่อย" : "หน่วย", ...(phcMode ? [["ราคา/หน่วยย่อย (บาท)", "num"]] : []),
+        ["คงเหลือ", "num"], ["จุดสั่งซื้อ", "num"], "สถานะ", ""],
       items.filter((i) => (!q || `${i.code} ${i.name}`.toLowerCase().includes(q)) && (!wh || i.warehouse_id === Number(wh))).map((i) => [
-        esc(i.code), esc(i.name), esc(i.warehouse_name || "-"), esc(i.unit), [num(i.qty), "num"], [num(i.min_qty), "num"], state(i),
+        esc(i.code), esc(i.name), esc(i.warehouse_name || "-"), esc(i.unit), ...(phcMode ? [[baht(i.unit_price), "num"]] : []),
+        [num(i.qty), "num"], [num(i.min_qty), "num"], state(i),
         actions(btn("adjust", "รับเข้า/ปรับ", i.id), btn("edit", "แก้ไข", i.id), btn("history", "ประวัติ", i.id)),
       ]),
       q || wh ? "ไม่พบสินค้าที่ค้นหา" : 'ยังไม่มีสินค้า กด "+ เพิ่มสินค้า" เพื่อเริ่ม');
@@ -1256,10 +1259,13 @@ async function itemsView() {
 
   const byId = (id) => items.find((i) => String(i.id) === String(id));
   const fields = [
-    { name: "code", label: "รหัสสินค้า", required: true, placeholder: "เช่น MED-0001" },
+    phcMode ? { name: "code", label: "รหัสสินค้า", placeholder: "เว้นว่างได้", hint: "เว้นว่างให้ระบบตั้งให้ (P00001, P00002, ...)" }
+      : { name: "code", label: "รหัสสินค้า", required: true, placeholder: "เช่น MED-0001" },
     { name: "name", label: "ชื่อสินค้า", required: true, placeholder: "เช่น ถุงมือยาง ไซส์ M" },
     { name: "warehouse_id", label: "คลัง", type: "select", required: true, options: [["", "— เลือกคลัง —"], ...warehouses.map((w) => [w.id, w.name])] },
-    { name: "unit", label: "หน่วยนับ", required: true, list: "units", placeholder: "เช่น กล่อง, ชิ้น, ขวด, รีม", hint: "สินค้าละหน่วยนับเดียว" },
+    { name: "unit", label: phcMode ? "หน่วยย่อย" : "หน่วยนับ", required: true, list: "units", placeholder: "เช่น กล่อง, ชิ้น, ขวด, รีม", hint: "สินค้าละหน่วยนับเดียว" },
+    ...(phcMode ? [{ name: "unit_price", label: "ราคาในหน่วยย่อย (เบิก) บาท", type: "number", min: 0, step: "0.01",
+      hint: "ใช้เป็นราคาตั้งต้นตอนจ่ายของ แก้ในใบเบิกได้" }] : []),
     { name: "min_qty", label: "จุดสั่งซื้อ", type: "number", min: 0, value: 0, hint: "คงเหลือเท่านี้หรือน้อยกว่าจะแจ้งเตือนว่าใกล้หมด" },
   ];
   bind({
@@ -1313,7 +1319,10 @@ const IMPORT_ACTION = { new: ["เพิ่มใหม่", "ok"], update: ["�
 const IMPORT_MAX_MB = 8;
 
 function downloadImportTemplate() {
-  const rows = [["รหัสสินค้า", "ชื่อสินค้า", "คลัง", "หน่วยนับ", "คงเหลือ", "จุดสั่งซื้อ"],
+  const rows = phcMode ? [["ชื่อสินค้า", "หน่วยย่อย", "ราคาในหน่วยย่อย (เบิก)", "คลัง"],
+    ["ถุงมือยาง ไซส์ M", "กล่อง", "120", "คลังเวชภัณฑ์มิใช่ยา"],
+    ["สำลีก้อน", "ห่อ", "35.50", "คลังเวชภัณฑ์มิใช่ยา"]]
+    : [["รหัสสินค้า", "ชื่อสินค้า", "คลัง", "หน่วยนับ", "คงเหลือ", "จุดสั่งซื้อ"],
     ["IT-001", "เมาส์ USB", "คลังเทคโนโลยีสารสนเทศ", "อัน", "15", "5"],
     ["MED-001", "ถุงมือยาง ไซส์ M", "คลังเวชภัณฑ์มิใช่ยา", "กล่อง", "30", "10"]];
   // ใส่ BOM ให้ Excel อ่านภาษาไทยถูก
@@ -1356,12 +1365,18 @@ function openImport() {
   const help = () => `<div class="import-help">
       <div class="row-between"><b>รูปแบบคอลัมน์ในไฟล์ (แถวแรกเป็นหัวตาราง)</b>
         <button type="button" class="link" data-imp="template">ดาวน์โหลดไฟล์ต้นแบบ (.csv)</button></div>
-      <div class="table-wrap"><table>
+      ${phcMode ? `<div class="table-wrap"><table>
+        <thead><tr><th>ชื่อสินค้า *</th><th>หน่วยย่อย *</th><th class="num">ราคาในหน่วยย่อย (เบิก)</th><th>คลัง *</th></tr></thead>
+        <tbody><tr><td>ถุงมือยาง ไซส์ M</td><td>กล่อง</td><td class="num">120</td><td>คลังเวชภัณฑ์มิใช่ยา</td></tr></tbody>
+      </table></div>
+      <small>คลัง: ใส่ชื่อหรือรหัสคลัง (${warehouses.map((w) => `${esc(w.name)} = ${esc(w.code)}`).join(" · ")})<br>
+        ระบบตั้งรหัสสินค้าให้เอง · ชื่อสินค้าในคลังเดียวกันที่มีอยู่แล้วจะอัปเดตหน่วยย่อยและราคาแทนการเพิ่มซ้ำ · ราคาใช้เป็นราคาตั้งต้นตอนจ่ายของ</small>`
+      : `<div class="table-wrap"><table>
         <thead><tr><th>รหัสสินค้า *</th><th>ชื่อสินค้า *</th><th>คลัง *</th><th>หน่วยนับ *</th><th class="num">คงเหลือ</th><th class="num">จุดสั่งซื้อ</th></tr></thead>
         <tbody><tr><td>IT-001</td><td>เมาส์ USB</td><td>คลังเทคโนโลยีสารสนเทศ</td><td>อัน</td><td class="num">15</td><td class="num">5</td></tr></tbody>
       </table></div>
       <small>คลัง: ใส่ชื่อหรือรหัสคลัง (${warehouses.map((w) => `${esc(w.name)} = ${esc(w.code)}`).join(" · ")})<br>
-        รหัสที่มีอยู่แล้วในระบบจะอัปเดตชื่อ คลัง หน่วยนับ และจุดสั่งซื้อ แทนการเพิ่มซ้ำ · สินค้าใหม่ใช้ "คงเหลือ" เป็นยอดยกมา</small>
+        รหัสที่มีอยู่แล้วในระบบจะอัปเดตชื่อ คลัง หน่วยนับ และจุดสั่งซื้อ แทนการเพิ่มซ้ำ · สินค้าใหม่ใช้ "คงเหลือ" เป็นยอดยกมา</small>`}
     </div>`;
 
   const preview = () => {
@@ -1372,12 +1387,13 @@ function openImport() {
     return `<div class="imp-file"><span class="tag">${/\.csv$/i.test(st.name) ? "CSV" : "XLSX"}</span><b>${esc(st.name)}</b>
         <span class="muted">· ${num(r.rows.length)} รายการ</span>
         <span class="chips">${["new", "update", "same", "error"].filter((k) => c[k]).map((k) => badge(`${IMPORT_ACTION[k][0]} ${num(c[k])}`, IMPORT_ACTION[k][1])).join("")}</span></div>
-      <label class="check"><input type="checkbox" id="imp-stock" ${st.updateStock ? "checked" : ""}>
-        <span>ปรับยอดคงเหลือของสินค้าที่มีอยู่แล้วให้ตรงกับคอลัมน์ "คงเหลือ" ในไฟล์ <small>(ใช้ตอนตรวจนับสต็อก · บันทึกในประวัติสต็อก)</small></span></label>
+      ${phcMode ? "" : `<label class="check"><input type="checkbox" id="imp-stock" ${st.updateStock ? "checked" : ""}>
+        <span>ปรับยอดคงเหลือของสินค้าที่มีอยู่แล้วให้ตรงกับคอลัมน์ "คงเหลือ" ในไฟล์ <small>(ใช้ตอนตรวจนับสต็อก · บันทึกในประวัติสต็อก)</small></span></label>`}
       <div class="table-wrap imp-table"><table>
-        <thead><tr><th class="num">แถว</th><th>รหัส</th><th>ชื่อสินค้า</th><th>คลัง</th><th>หน่วย</th><th class="num">คงเหลือ</th><th>ผลตรวจ</th></tr></thead>
-        <tbody>${shown.map((x) => `<tr class="imp-${x.action}"><td class="num">${x.row}</td><td class="nowrap">${esc(x.code || "-")}</td><td>${esc(x.name || "-")}</td>
-          <td>${esc(x.warehouse || "-")}</td><td>${esc(x.unit || "-")}</td><td class="num">${x.qty == null ? "-" : num(x.qty)}</td>
+        <thead><tr><th class="num">แถว</th>${phcMode ? "" : "<th>รหัส</th>"}<th>ชื่อสินค้า</th><th>คลัง</th><th>${phcMode ? "หน่วยย่อย" : "หน่วย"}</th>
+          <th class="num">${phcMode ? "ราคา (บาท)" : "คงเหลือ"}</th><th>ผลตรวจ</th></tr></thead>
+        <tbody>${shown.map((x) => `<tr class="imp-${x.action}"><td class="num">${x.row}</td>${phcMode ? "" : `<td class="nowrap">${esc(x.code || "-")}</td>`}<td>${esc(x.name || "-")}</td>
+          <td>${esc(x.warehouse || "-")}</td><td>${esc(x.unit || "-")}</td><td class="num">${phcMode ? baht(x.price) : x.qty == null ? "-" : num(x.qty)}</td>
           <td class="msg">${badge(...IMPORT_ACTION[x.action])} ${esc(x.message)}</td></tr>`).join("")}</tbody>
       </table></div>
       ${r.rows.length > shown.length ? `<small>แสดง ${num(shown.length)} รายการแรก จากทั้งหมด ${num(r.rows.length)}</small>` : ""}
@@ -1658,7 +1674,7 @@ async function analyticsView() {
           <button type="button" class="link" data-act="go" data-id="approve">ไปหน้าอนุมัติ →</button></div>
         ${table(["เลขที่", "หน่วยงาน", "ประเภท", "สถานะ"], s.waiting.map((r) => [`<b class="doc-no">${esc(r.doc_no)}</b>`, esc(r.department_name), typeBadge(r.req_type), statusBadge(r.status)]), "ไม่มีใบเบิกค้าง")}</section>` : ""}
       <section class="chart"><div class="chart-title"><b>สินค้าที่ไม่มีการเบิก</b>
-          ${s ? `<button type="button" class="link" data-act="go" data-id="items">สินค้า/สต็อก →</button>` : ""}
+          ${s && allowed("items") ? `<button type="button" class="link" data-act="go" data-id="items">สินค้า/สต็อก →</button>` : ""}
           <small>ย้อนหลัง 30 วัน (ตั้งแต่ ${when(a.idle_since, false)}) · ${num(a.idle_items.length)} รายการ · เฉพาะสินค้าที่เปิดให้เบิก</small></div>
         <div class="idle-scroll">${table(["รายการ", "คลัง", "เบิกล่าสุด"], a.idle_items.map((i) => [esc(i.name), esc(i.warehouse_name),
           i.last_requested ? when(i.last_requested, false) : `<small>ไม่เคยเบิก</small>`]),
@@ -2097,7 +2113,9 @@ const NAV = {
     ["regRequester", "ทะเบียน"], ["regReceiver"], ["regCentral"], ["departments"], ["users"], ["analytics", "รายงาน"],
     ["guidelines", "ประกาศ"], ["issues", "ติดต่อคลังกลาง"]],
 };
-const allowed = (key) => !VIEWS[key][2] || me?.role === VIEWS[key][2];
+// ระบบ รพ.สต. ไม่มีเมนูสินค้าคงคลังและประวัติสต็อก (ยังมีสินค้า/สต็อก)
+const PHC_HIDDEN = new Set(["stock", "movements"]);
+const allowed = (key) => !(phcMode && PHC_HIDDEN.has(key)) && (!VIEWS[key][2] || me?.role === VIEWS[key][2]);
 const navLabel = (key) => (typeof VIEWS[key][0] === "function" ? VIEWS[key][0]() : VIEWS[key][0]);
 let current = null;
 

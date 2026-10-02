@@ -265,6 +265,9 @@ def init_one(system):
         # ราคาต่อหน่วย (บาท) ของรายการที่จ่าย ใช้ในระบบ รพ.สต.
         if "unit_price" not in {r["name"] for r in conn.execute("PRAGMA table_info(lines)")}:
             conn.execute("ALTER TABLE lines ADD COLUMN unit_price REAL")
+        # ราคาในหน่วยย่อย (เบิก) ของสินค้า ใช้เป็นราคาตั้งต้นตอนจ่าย (ระบบ รพ.สต.)
+        if "unit_price" not in {r["name"] for r in conn.execute("PRAGMA table_info(items)")}:
+            conn.execute("ALTER TABLE items ADD COLUMN unit_price REAL")
         if "system" not in {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}:
             conn.execute("ALTER TABLE sessions ADD COLUMN system TEXT NOT NULL DEFAULT 'hospital'")
         # เพิ่มคลังตั้งต้นที่ยังไม่มี (ฐานข้อมูลเดิมได้คลังใหม่อัตโนมัติ ไม่แตะคลังที่มีอยู่)
@@ -726,11 +729,27 @@ def list_items(ctx, body, query):
     return rows(ctx.conn.execute(ITEM_SQL + ("" if show_all else " WHERE i.active = 1") + " ORDER BY i.warehouse_id, i.code"))
 
 
+def next_item_code(conn):
+    """รหัสสินค้าอัตโนมัติของ รพ.สต. (ไฟล์นำเข้าไม่มีรหัส): P00001, P00002, ..."""
+    last = conn.execute("SELECT MAX(CAST(SUBSTR(code, 2) AS INTEGER)) FROM items WHERE code GLOB 'P[0-9]*'").fetchone()[0]
+    return f"P{(last or 0) + 1:05d}"
+
+
+def is_phc(ctx):
+    return bool(ctx.user) and ctx.user["session_system"] == "phc"
+
+
+def save_item_price(ctx, item_id, body):
+    if is_phc(ctx) and "unit_price" in body:
+        ctx.conn.execute("UPDATE items SET unit_price = ? WHERE id = ?", (number(body.get("unit_price"), "ราคาต่อหน่วย", minimum=0), item_id))
+
+
 def item_values(ctx, body):
     wh = body.get("warehouse_id")
     if not str(wh or "").isdigit() or not ctx.conn.execute("SELECT 1 FROM warehouses WHERE id = ?", (int(wh),)).fetchone():
         raise ApiError(400, "กรุณาเลือกคลัง")
-    return (text(body.get("code"), "รหัสสินค้า", True), text(body.get("name"), "ชื่อสินค้า", True), int(wh),
+    code = text(body.get("code"), "รหัสสินค้า", not is_phc(ctx)) or next_item_code(ctx.conn)
+    return (code, text(body.get("name"), "ชื่อสินค้า", True), int(wh),
             text(body.get("unit"), "หน่วยนับ", True), number(body.get("min_qty"), "จุดสั่งซื้อ", minimum=0) or 0,
             flag(body.get("active", True)))
 
@@ -758,6 +777,7 @@ def create_item(ctx, body, query):
         item_id = ctx.conn.execute("INSERT INTO items (code, name, warehouse_id, unit, min_qty, active) VALUES (?, ?, ?, ?, ?, ?)", v).lastrowid
     except sqlite3.IntegrityError:
         raise ApiError(409, f"รหัสสินค้า {v[0]} มีอยู่แล้ว")
+    save_item_price(ctx, item_id, body)
     initial = number(body.get("initial_qty"), "ยอดคงเหลือ", minimum=0)
     if initial:
         change_stock(ctx, item_id, initial, "ยอดยกมา")
@@ -772,6 +792,7 @@ def update_item(ctx, body, query, item_id):
         ctx.conn.execute("UPDATE items SET code = ?, name = ?, warehouse_id = ?, unit = ?, min_qty = ?, active = ? WHERE id = ?", (*v, item_id))
     except sqlite3.IntegrityError:
         raise ApiError(409, f"รหัสสินค้า {v[0]} มีอยู่แล้ว")
+    save_item_price(ctx, item_id, body)
     return get_item(ctx.conn, item_id)
 
 
@@ -881,13 +902,45 @@ IMPORT_COLUMNS = {
     "min_qty": ["จุดสั่งซื้อ", "ขั้นต่ำ", "min", "reorder"],
 }
 REQUIRED_COLUMNS = {"code": "รหัสสินค้า", "name": "ชื่อสินค้า", "warehouse": "คลัง", "unit": "หน่วยนับ"}
+# ระบบ รพ.สต.: ไฟล์มีแค่ ชื่อสินค้า หน่วยย่อย ราคาในหน่วยย่อย (เบิก) คลัง · รหัสสินค้าระบบตั้งให้
+PHC_IMPORT_COLUMNS = {
+    "name": ["ชื่อสินค้า", "ชื่อ", "รายการ", "name"],
+    "unit": ["หน่วยย่อย", "หน่วยนับ", "หน่วย", "unit"],
+    "price": ["ราคาในหน่วยย่อยเบิก", "ราคาในหน่วยย่อย", "ราคาต่อหน่วย", "ราคา", "price"],
+    "warehouse": ["คลัง", "ชื่อคลัง", "รหัสคลัง", "warehouse"],
+}
+PHC_REQUIRED_COLUMNS = {"name": "ชื่อสินค้า", "unit": "หน่วยย่อย", "price": "ราคาในหน่วยย่อย (เบิก)", "warehouse": "คลัง"}
 
 
-def header_key(text):
+def header_key(text, columns=IMPORT_COLUMNS):
     t = re.sub(r"[\s*_\-()]", "", str(text)).lower()
-    for key, aliases in IMPORT_COLUMNS.items():
+    for key, aliases in columns.items():
         if t in [a.lower() for a in aliases]:
             return key
+    return None
+
+
+def find_header(table, columns, required):
+    """หาแถวหัวตาราง (อยู่ใน 10 แถวแรก) คืน (เลขแถว, {คอลัมน์: ตำแหน่ง})"""
+    for i, row in enumerate(table[:10]):
+        found = {}
+        for j, cell in enumerate(row):
+            key = header_key(cell, columns)
+            if key and key not in found:
+                found[key] = j
+        if len(found) >= 2:
+            missing = [label for key, label in required.items() if key not in found]
+            if missing:
+                raise ApiError(400, "ไฟล์ไม่มีคอลัมน์: " + ", ".join(missing))
+            return i, found
+    raise ApiError(400, "ไม่พบหัวตาราง ต้องมีคอลัมน์ " + ", ".join(required.values()))
+
+
+def find_warehouse_in(warehouses, text):
+    t = re.sub(r"\s", "", text)
+    for w in warehouses:
+        if t.upper() == w["code"].upper() or t in (w["name"], w["name"].replace("คลัง", "", 1)):
+            return w
     return None
 
 
@@ -907,6 +960,14 @@ def import_number(value, label):
 def import_items(ctx, body, query):
     """ตรวจไฟล์และแสดงผลก่อน (apply=false) แล้วค่อยบันทึกจริง (apply=true)"""
     ctx.require_admin()
+    if is_phc(ctx):
+        return import_items_phc(ctx, body, read_import_table(body))
+    table = read_import_table(body)
+    header_row, columns = find_header(table, IMPORT_COLUMNS, REQUIRED_COLUMNS)
+    return import_items_hospital(ctx, body, table, header_row, columns)
+
+
+def read_import_table(body):
     filename = str(body.get("filename") or "").lower()
     try:
         raw = base64.b64decode(str(body.get("data") or ""), validate=True)
@@ -922,31 +983,76 @@ def import_items(ctx, body, query):
         raise ApiError(400, "ไฟล์ .xls แบบเก่ายังไม่รองรับ ให้เปิดใน Excel แล้วบันทึกเป็น .xlsx")
     else:
         raise ApiError(400, "รองรับเฉพาะไฟล์ .xlsx หรือ .csv")
+    return table
 
-    # หาแถวหัวตาราง (อยู่ใน 10 แถวแรก)
-    header_row, columns = None, {}
-    for i, row in enumerate(table[:10]):
-        found = {}
-        for j, cell in enumerate(row):
-            key = header_key(cell)
-            if key and key not in found:
-                found[key] = j
-        if len(found) >= 2:
-            header_row, columns = i, found
-            break
-    if header_row is None:
-        raise ApiError(400, "ไม่พบหัวตาราง ต้องมีคอลัมน์ " + ", ".join(REQUIRED_COLUMNS.values()))
-    missing = [label for key, label in REQUIRED_COLUMNS.items() if key not in columns]
-    if missing:
-        raise ApiError(400, "ไฟล์ไม่มีคอลัมน์: " + ", ".join(missing))
 
+def import_items_phc(ctx, body, table):
+    """นำเข้าสินค้าของ รพ.สต.: สินค้าเดิมหาจากชื่อสินค้า + คลัง (ไม่มีรหัสในไฟล์) แล้วอัปเดตหน่วยย่อยและราคา"""
+    header_row, columns = find_header(table, PHC_IMPORT_COLUMNS, PHC_REQUIRED_COLUMNS)
     warehouses = rows(ctx.conn.execute("SELECT * FROM warehouses"))
-    def find_warehouse(text):
-        t = re.sub(r"\s", "", text)
-        for w in warehouses:
-            if t.upper() == w["code"].upper() or t in (w["name"], w["name"].replace("คลัง", "", 1)):
-                return w
-        return None
+    norm = lambda t: re.sub(r"\s+", " ", t).strip().lower()
+    existing = {(norm(r["name"]), r["warehouse_id"]): r for r in rows(ctx.conn.execute("SELECT * FROM items"))}
+    results, seen = [], set()
+    for n, row in enumerate(table[header_row + 1:], start=header_row + 2):
+        get = lambda key: row[columns[key]].strip() if key in columns and columns[key] < len(row) else ""
+        values = {k: get(k) for k in PHC_IMPORT_COLUMNS}
+        if not any(values.values()):
+            continue
+        r = {"row": n, "code": "", "name": values["name"], "warehouse": values["warehouse"], "unit": values["unit"],
+             "price": None, "qty": None, "action": "error", "message": ""}
+        results.append(r)
+        if len(results) > MAX_IMPORT_ROWS:
+            raise ApiError(400, f"ไฟล์มีสินค้าเกิน {MAX_IMPORT_ROWS} รายการ แบ่งเป็นหลายไฟล์")
+        try:
+            empty = [label for key, label in PHC_REQUIRED_COLUMNS.items() if key != "price" and not values[key]]
+            if empty:
+                raise ValueError("ไม่ได้กรอก " + ", ".join(empty))
+            wh = find_warehouse_in(warehouses, values["warehouse"])
+            if not wh:
+                raise ValueError(f"ไม่รู้จักคลัง \"{values['warehouse']}\"")
+            key = (norm(values["name"]), wh["id"])
+            if key in seen:
+                raise ValueError("ชื่อสินค้าซ้ำกับแถวก่อนหน้าในไฟล์ (คลังเดียวกัน)")
+            seen.add(key)
+            price = import_number(values["price"], "ราคาในหน่วยย่อย")
+        except ValueError as err:
+            r["message"] = str(err)
+            continue
+        r.update(warehouse=wh["name"], warehouse_id=wh["id"], price=price)
+        old = existing.get(key)
+        if not old:
+            r["action"] = "new"
+            r["message"] = "เพิ่มใหม่" + (f" ราคา {price:,.2f} บาท/{values['unit']}" if price is not None else " (ยังไม่มีราคา)")
+            continue
+        r["code"] = old["code"]
+        changes = []
+        if old["unit"] != values["unit"]:
+            changes.append("หน่วยย่อย")
+        if price is not None and old["unit_price"] != price:
+            changes.append(f"ราคา {old['unit_price'] or 0:,.2f} → {price:,.2f}")
+        r["item_id"] = old["id"]
+        r["action"] = "update" if changes else "same"
+        r["message"] = ("แก้ " + ", ".join(changes)) if changes else "มีอยู่แล้ว ข้อมูลตรงกัน"
+
+    if body.get("apply") is True:
+        for r in results:
+            if r["action"] == "new":
+                r["code"] = next_item_code(ctx.conn)
+                ctx.conn.execute("INSERT INTO items (code, name, warehouse_id, unit, unit_price) VALUES (?, ?, ?, ?, ?)",
+                                 (r["code"], r["name"], r["warehouse_id"], r["unit"], r["price"]))
+            elif r["action"] == "update":
+                ctx.conn.execute("UPDATE items SET unit = ?, unit_price = COALESCE(?, unit_price) WHERE id = ?",
+                                 (r["unit"], r["price"], r["item_id"]))
+    counts = {k: sum(1 for r in results if r["action"] == k) for k in ("new", "update", "same", "error")}
+    for r in results:
+        r.pop("item_id", None)
+        r.pop("warehouse_id", None)
+    return {"columns": [k for k in PHC_IMPORT_COLUMNS if k in columns], "rows": results, "counts": counts, "applied": body.get("apply") is True}
+
+
+def import_items_hospital(ctx, body, table, header_row, columns):
+    warehouses = rows(ctx.conn.execute("SELECT * FROM warehouses"))
+    find_warehouse = lambda text: find_warehouse_in(warehouses, text)
 
     existing = {r["code"]: r for r in rows(ctx.conn.execute("SELECT * FROM items"))}
     update_stock = body.get("update_stock") is True
@@ -1068,7 +1174,7 @@ def get_req(ctx, req_id):
     # last_price: ราคาต่อหน่วยล่าสุดของสินค้านี้จากใบเบิกอื่น ใช้เป็นค่าตั้งต้นตอนจ่าย
     doc["lines"] = rows(ctx.conn.execute("""SELECT l.*, i.code, i.name, i.unit, i.qty AS stock, i.warehouse_id, w.name AS warehouse_name,
         (SELECT p.unit_price FROM lines p WHERE p.item_id = l.item_id AND p.unit_price IS NOT NULL AND p.id != l.id
-         ORDER BY p.id DESC LIMIT 1) AS last_price
+         ORDER BY p.id DESC LIMIT 1) AS last_price, i.unit_price AS item_price
         FROM lines l JOIN items i ON i.id = l.item_id JOIN warehouses w ON w.id = i.warehouse_id
         WHERE l.requisition_id = ? ORDER BY i.warehouse_id, i.code""", (req_id,)))
     with_summary(ctx.conn, [doc])
