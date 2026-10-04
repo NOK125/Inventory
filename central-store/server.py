@@ -789,6 +789,19 @@ def update_item(ctx, body, query, item_id):
     return get_item(ctx.conn, item_id)
 
 
+def delete_item(ctx, body, query, item_id):
+    """ลบสินค้า (ผู้ดูแลคลังเท่านั้น) ได้เฉพาะสินค้าที่ไม่เคยอยู่ในใบเบิก เพื่อไม่ให้ใบเบิกเก่าเสีย
+    ประวัติสต็อกของสินค้านี้ (เช่น ยอดยกมา) ถูกลบไปด้วย"""
+    ctx.require_admin()
+    item = get_item(ctx.conn, item_id)
+    used = ctx.conn.execute("SELECT COUNT(DISTINCT requisition_id) FROM lines WHERE item_id = ?", (item_id,)).fetchone()[0]
+    if used:
+        raise ApiError(409, f"ลบ {item['name']} ไม่ได้ เพราะอยู่ในใบเบิก {used} ใบ ถ้าไม่ต้องการให้เบิกแล้ว ให้กด \"แก้ไข\" แล้วตั้งเป็นงดเบิก")
+    ctx.conn.execute("DELETE FROM movements WHERE item_id = ?", (item_id,))
+    ctx.conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    return {"ok": True}
+
+
 def adjust_item(ctx, body, query, item_id):
     ctx.require_admin()
     delta = number(body.get("delta"), "จำนวน", True)
@@ -1824,6 +1837,7 @@ route("POST", "/positions", create_position)
 route("GET", "/items", list_items)
 route("POST", "/items", create_item)
 route("PUT", f"/items/{ID}", update_item)
+route("DELETE", f"/items/{ID}", delete_item)
 route("POST", f"/items/{ID}/adjust", adjust_item)
 route("POST", "/items/import", import_items)
 route("GET", "/movements", list_movements)

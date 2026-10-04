@@ -1249,7 +1249,8 @@ async function itemsView() {
       items.filter((i) => (!q || `${i.code} ${i.name}`.toLowerCase().includes(q)) && (!wh || i.warehouse_id === Number(wh))).map((i) => [
         esc(i.code), esc(i.name), esc(i.warehouse_name || "-"), esc(i.unit), ...(phcMode ? [[baht(i.unit_price), "num"]] : []),
         [num(i.qty), "num"], [num(i.min_qty), "num"], state(i),
-        actions(btn("adjust", "รับเข้า/ปรับ", i.id), btn("edit", "แก้ไข", i.id), btn("history", "ประวัติ", i.id)),
+        actions(btn("adjust", "รับเข้า/ปรับ", i.id), btn("edit", "แก้ไข", i.id), btn("history", "ประวัติ", i.id),
+          ...(me.role === "admin" ? [btn("del", "ลบ", i.id, "danger")] : [])),
       ]),
       q || wh ? "ไม่พบสินค้าที่ค้นหา" : 'ยังไม่มีสินค้า กด "+ เพิ่มสินค้า" เพื่อเริ่ม');
   };
@@ -1300,6 +1301,14 @@ async function itemsView() {
           toast("ปรับสต็อกแล้ว"); refresh();
         },
       });
+    },
+    // ลบได้เฉพาะสินค้าที่ไม่เคยอยู่ในใบเบิก (เซิร์ฟเวอร์ตรวจและแจ้งเหตุผลถ้าลบไม่ได้)
+    del: async (id) => {
+      const item = byId(id);
+      if (!confirm(`ลบสินค้า ${item.code} ${item.name}?
+ประวัติสต็อกของสินค้านี้จะถูกลบด้วย และกู้คืนไม่ได้`)) return;
+      try { await api("DELETE", `/items/${id}`); toast(`ลบ ${item.name} แล้ว`); refresh(); }
+      catch (e) { toast(e.message, true); }
     },
     history: async (id) => {
       const item = byId(id);
