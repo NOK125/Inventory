@@ -495,6 +495,7 @@ input:disabled { background: var(--chip); color: var(--muted); }
 .person-edit h3 { grid-column: 1 / -1; margin: 0; font-size: 14px; }
 .doc-col b { font-size: 13.5px; line-height: 1.25; }
 .doc-col small { font-size: 11.5px; }
+.doc-col .doc-link { font-size: 12px; font-weight: 700; padding: 0; text-decoration: underline; }
 .doc-col .badges { display: flex; flex-wrap: wrap; gap: 4px; }
 .doc-col .badge { font-size: 11px; padding: 1px 7px; }
 .doc-col .btn { font-size: 12px; padding: 3px 0; margin-top: 2px; }

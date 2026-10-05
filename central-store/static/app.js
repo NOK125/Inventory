@@ -1050,7 +1050,8 @@ async function approveView() {
         ${shown.map((d) => {
           const done = d.status === "approved";
           return `<th class="${done ? "is-approved" : ""}"><div class="doc-col">
-            <b>${esc(d.department_name)}</b><small>${esc(d.doc_no)} · ${esc((d.requester_name || "").split(" ")[0])}</small>
+            <b>${esc(d.department_name)}</b><small><button type="button" class="link doc-link" data-act="open-doc" data-id="${d.id}"
+              title="เปิดดูใบเบิก ${esc(d.doc_no)}">${esc(d.doc_no)}</button> · ${esc((d.requester_name || "").split(" ")[0])}</small>
             <div class="badges">${typeBadge(d.req_type)}${statusBadge(d.status)}</div>
             ${whoInput(d, "approver", "ผู้อนุมัติ", "เลือกหรือพิมพ์ชื่อ")}
             ${whoInput(d, "issuer", "ผู้จ่าย", "เว้นว่างได้ ใส่ตอนจ่าย")}
@@ -1122,6 +1123,8 @@ async function approveView() {
   };
   bind({
     filter: (k) => { board.filter = k; draw(); },
+    // เปิดรายละเอียดใบเบิก (อนุมัติ/ไม่อนุมัติ/พิมพ์ได้จากหน้าต่างนั้น แล้วหน้านี้รีเฟรชเอง)
+    "open-doc": (id) => openRequisition(id),
     "approve-one": async (id, b) => {
       const d = docOf(id);
       if (missingApprover([d])) return toast(`กรุณาใส่ชื่อผู้อนุมัติของ ${d.doc_no}`, true);
