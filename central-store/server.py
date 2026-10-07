@@ -1287,7 +1287,12 @@ def cancel_requisition(ctx, body, query, req_id):
     return get_req(ctx, req_id)
 
 
-def line_qty(doc, entries, field, fallback):
+MAX_LINE_QTY = 1_000_000  # กันพิมพ์ผิด (เช่น ใส่เลขยาวเกิน) ตอนอนุมัติมากกว่าที่ขอ
+
+
+def line_qty(doc, entries, field, fallback, cap=None):
+    """จำนวนต่อรายการ: cap = ชื่อคอลัมน์ที่เป็นเพดาน (จ่ายไม่เกินจำนวนอนุมัติ) หรือ None = ไม่จำกัด
+    (ผู้อนุมัติอนุมัติได้มากหรือน้อยกว่าที่ขอ)"""
     given = {}
     for e in entries or []:
         if isinstance(e, dict) and str(e.get("line_id", "")).isdigit():
@@ -1296,8 +1301,9 @@ def line_qty(doc, entries, field, fallback):
     for l in doc["lines"]:
         qty = given.get(l["id"])
         qty = l[fallback] if qty is None else qty
-        if qty is None or qty < 0 or qty > l["qty_requested"]:
-            raise ApiError(400, f"{l['name']}: จำนวนต้องอยู่ระหว่าง 0 ถึง {l['qty_requested']:g}")
+        top = l[cap] if cap else MAX_LINE_QTY
+        if qty is None or qty < 0 or qty > top:
+            raise ApiError(400, f"{l['name']}: จำนวนต้องอยู่ระหว่าง 0 ถึง {top:g}")
         result[l["id"]] = qty
     return result
 
@@ -1533,7 +1539,7 @@ def issue_requisition(ctx, body, query, req_id):
     require_status(doc, "approved")
     issuer = text(body.get("issuer_name"), "ชื่อผู้จ่าย", True)
     receiver = text(body.get("receiver_name"), "ชื่อผู้รับ", True)
-    qty = line_qty(doc, body.get("lines"), "qty_issued", "qty_approved")
+    qty = line_qty(doc, body.get("lines"), "qty_issued", "qty_approved", cap="qty_approved")
     save_prices(ctx, doc, body.get("lines"))
     # จ่ายได้ตามจำนวนที่ต้องการแม้คงเหลือในระบบไม่พอ: คงเหลือหยุดที่ 0 ไม่ติดลบ และประวัติสต็อกบันทึกส่วนที่ขาด
     for l in doc["lines"]:

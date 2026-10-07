@@ -239,15 +239,16 @@ const docTotal = (doc) => doc.lines.reduce((sum, l) => sum + (lineValue(l.unit_p
 // mode: view | approve | issue | price
 function linesTable(doc, mode) {
   const admin = me.role === "admin";
+  // max = null: ไม่จำกัด (อนุมัติได้มากกว่าที่ขอ) · จ่ายจริงยังจำกัดไม่เกินจำนวนอนุมัติ
   const input = (line, field, value, max) =>
-    `<input class="qty-input" type="number" step="any" min="0" max="${max}" data-line="${line.id}" data-field="${field}" value="${value}" required aria-label="${esc(line.name)}">`;
+    `<input class="qty-input" type="number" step="any" min="0" ${max == null ? "" : `max="${max}"`} data-line="${line.id}" data-field="${field}" value="${value}" required aria-label="${esc(line.name)}">`;
   const headers = ["#", "คลัง", "รหัส", "รายการ", "หน่วย", ["ขอเบิก", "num"], ["อนุมัติ", "num"], ["จ่ายจริง", "num"]];
   const showPrice = priced(doc) && (mode !== "view" || doc.status === "issued");
   if (showPrice) headers.push(["ราคาต่อหน่วย (บาท)", "num"], ["มูลค่า (บาท)", "num"]);
   if (admin && doc.status !== "issued") headers.push(["คงเหลือในคลัง", "num"]);
   const editPrice = showPrice && (mode === "issue" || mode === "price");
   const rowsHtml = doc.lines.map((l, i) => {
-    const approved = mode === "approve" ? input(l, "qty_approved", l.qty_requested, l.qty_requested) : num(l.qty_approved);
+    const approved = mode === "approve" ? input(l, "qty_approved", l.qty_requested, null) : num(l.qty_approved);
     // จ่ายจริงเริ่มต้นเท่าจำนวนอนุมัติ ถ้าคงเหลือไม่พอ เซิร์ฟเวอร์ตัดสต็อกได้แค่ถึง 0 และบันทึกส่วนที่ขาดในประวัติ
     const issued = mode === "issue" ? input(l, "qty_issued", l.qty_approved, l.qty_approved) : num(l.qty_issued);
     const cells = [i + 1, esc(l.warehouse_name || "-"), esc(l.code), esc(l.name), esc(l.unit), [num(l.qty_requested), "num"], [approved, "num"], [issued, "num"]];
@@ -1112,7 +1113,8 @@ async function approveView() {
     if (t.matches(".qty-input")) {
       const d = docOf(t.dataset.doc);
       const l = d.lines.find((x) => String(x.id) === t.dataset.line);
-      const v = Math.min(l.qty_requested, Math.max(0, Number(t.value) || 0));
+      // อนุมัติได้มากหรือน้อยกว่าที่ขอ (ไม่ติดลบ) ช่องที่ต่างจากที่ขอจะเป็นสีส้ม
+      const v = Math.max(0, Number(t.value) || 0);
       board.edits[d.id] = { ...(board.edits[d.id] || {}), [l.id]: v };
       afterPointer(t, draw);
     }
