@@ -1300,7 +1300,8 @@ def line_qty(doc, entries, field, fallback, cap=None):
     result = {}
     for l in doc["lines"]:
         qty = given.get(l["id"])
-        qty = l[fallback] if qty is None else qty
+        if qty is None:  # ไม่ได้ส่งมา: ใช้ค่าแรกที่มีตามลำดับ fallback (เช่น จำนวนที่อนุมัติไว้เดิม แล้วจึงจำนวนที่ขอ)
+            qty = next((l[f] for f in ((fallback,) if isinstance(fallback, str) else fallback) if l[f] is not None), None)
         top = l[cap] if cap else MAX_LINE_QTY
         if qty is None or qty < 0 or qty > top:
             raise ApiError(400, f"{l['name']}: จำนวนต้องอยู่ระหว่าง 0 ถึง {top:g}")
@@ -1313,7 +1314,7 @@ def approve_requisition(ctx, body, query, req_id):
     doc = get_req(ctx, req_id)
     require_status(doc, "pending")
     approver = text(body.get("approver_name"), "ชื่อผู้อนุมัติ", True)
-    qty = line_qty(doc, body.get("lines"), "qty_approved", "qty_requested")
+    qty = line_qty(doc, body.get("lines"), "qty_approved", ("qty_approved", "qty_requested"))
     ctx.conn.executemany("UPDATE lines SET qty_approved = ? WHERE id = ?", [(q, lid) for lid, q in qty.items()])
     ctx.conn.execute("UPDATE requisitions SET status = 'approved', approver_name = ?, approver_position = ?, approved_at = ? WHERE id = ?",
                      (approver, text(body.get("approver_position"), "ตำแหน่ง"), now(), req_id))
@@ -1519,7 +1520,8 @@ def stock_report_file(ctx, body, query, sid):
 def unapprove_requisition(ctx, body, query, req_id):
     ctx.require_admin()
     require_status(get_req(ctx, req_id), "approved")
-    ctx.conn.execute("UPDATE lines SET qty_approved = NULL WHERE requisition_id = ?", (req_id,))
+    # คงจำนวนที่อนุมัติไว้ เพื่อให้แก้ต่อจากเดิมได้ ไม่ย้อนกลับไปเป็นจำนวนที่หน่วยงานขอ
+    # (ถ้าหน่วยงานแก้ใบเบิกระหว่างรออนุมัติ write_lines จะสร้างรายการใหม่ จำนวนอนุมัติเดิมจึงหายไปเอง)
     ctx.conn.execute("UPDATE requisitions SET status = 'pending', approved_at = NULL WHERE id = ?", (req_id,))
     return get_req(ctx, req_id)
 

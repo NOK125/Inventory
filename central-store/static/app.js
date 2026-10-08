@@ -248,7 +248,7 @@ function linesTable(doc, mode) {
   if (admin && doc.status !== "issued") headers.push(["คงเหลือในคลัง", "num"]);
   const editPrice = showPrice && (mode === "issue" || mode === "price");
   const rowsHtml = doc.lines.map((l, i) => {
-    const approved = mode === "approve" ? input(l, "qty_approved", l.qty_requested, null) : num(l.qty_approved);
+    const approved = mode === "approve" ? input(l, "qty_approved", l.qty_approved ?? l.qty_requested, null) : num(l.qty_approved);
     // จ่ายจริงเริ่มต้นเท่าจำนวนอนุมัติ ถ้าคงเหลือไม่พอ เซิร์ฟเวอร์ตัดสต็อกได้แค่ถึง 0 และบันทึกส่วนที่ขาดในประวัติ
     const issued = mode === "issue" ? input(l, "qty_issued", l.qty_approved, l.qty_approved) : num(l.qty_issued);
     const cells = [i + 1, esc(l.warehouse_name || "-"), esc(l.code), esc(l.name), esc(l.unit), [num(l.qty_requested), "num"], [approved, "num"], [issued, "num"]];
@@ -1002,7 +1002,8 @@ async function approveView() {
     <input class="who-input" list="central-people" data-doc="${d.id}" data-role="${role}" value="${esc(nameOf(d, role))}"
       placeholder="${placeholder}" autocomplete="off" aria-label="${label} ใบ ${esc(d.doc_no)}"></label>`;
 
-  const val = (d, l) => (d.status === "approved" ? l.qty_approved : board.edits[d.id]?.[l.id] ?? l.qty_requested);
+  // ใบที่เคยอนุมัติแล้วยกเลิกอนุมัติ: เริ่มจากจำนวนที่อนุมัติไว้เดิม ไม่ใช่จำนวนที่ขอ
+  const val = (d, l) => (d.status === "approved" ? l.qty_approved : board.edits[d.id]?.[l.id] ?? l.qty_approved ?? l.qty_requested);
   const items = new Map();
   docs.forEach((d) => d.lines.forEach((l) => { if (!items.has(l.item_id)) items.set(l.item_id, l); }));
   const allItems = [...items.values()].sort((a, b) => a.warehouse_id - b.warehouse_id || a.code.localeCompare(b.code));
@@ -1136,7 +1137,7 @@ async function approveView() {
     },
     unapprove: async (id) => {
       const d = docOf(id);
-      try { await api("POST", `/requisitions/${id}/unapprove`, {}); toast(`ยกเลิกอนุมัติ ${d.doc_no} แล้ว แก้จำนวนได้อีกครั้ง`); } catch (e) { toast(e.message, true); }
+      try { await api("POST", `/requisitions/${id}/unapprove`, {}); toast(`ยกเลิกอนุมัติ ${d.doc_no} แล้ว จำนวนที่อนุมัติไว้ยังอยู่ แก้แล้วกดอนุมัติอีกครั้ง`); } catch (e) { toast(e.message, true); }
       reload();
     },
     "approve-all": async (_, b) => {
