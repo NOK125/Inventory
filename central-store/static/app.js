@@ -1014,7 +1014,8 @@ async function approveView() {
 
   view.innerHTML = `${pageHead("อนุมัติและสรุปการเบิก", {
       over: `<span class="badge dark">ADMIN</span><span>ใบเบิกที่ส่งถึง ${when(nowTs())}</span>`,
-      right: `<div class="head-btns"><button type="button" class="btn outline" data-act="pdf-history" title="ใบที่อนุมัติแล้วและจ่ายแล้ว เลือกตามวันที่อนุมัติ">PDF ย้อนหลัง</button>
+      right: `<div class="head-btns"><button type="button" class="btn outline" data-act="excel" title="ใบเบิกที่รออนุมัติและอนุมัติแล้ว เลือกเฉพาะคลัง"><span class="tag">XLSX</span>Excel รายคลัง</button>
+        <button type="button" class="btn outline" data-act="pdf-history" title="ใบที่อนุมัติแล้วและจ่ายแล้ว เลือกตามวันที่อนุมัติ">PDF ย้อนหลัง</button>
         <button type="button" class="btn outline" data-act="pdf" id="pdf-btn" title="ดาวน์โหลดเฉพาะใบเบิกที่อนุมัติแล้ว"><span class="tag">PDF</span><span>ดาวน์โหลดสรุป (<span id="pdf-n">0</span> ใบ)</span></button></div>`,
     })}
     <div class="board-bar"><div class="chips" id="filters"></div><div class="chips mode-chips" id="modes"></div><span class="counts" id="counts"></span></div>
@@ -1217,6 +1218,7 @@ async function approveView() {
     },
     pdf: () => { const done = approvedDocs(); openSummary(done, { approver: commonPerson(done, "approver"), issuer: commonPerson(done, "issuer") }); },
     "pdf-history": () => openPdfHistory(),
+    excel: () => openBoardExcel(docs, board.filter),
   });
   draw();
 }
@@ -1296,6 +1298,34 @@ function openPdfHistory() {
   });
 }
 
+// ใบเบิกบนหน้าอนุมัติ เฉพาะรายการของคลังที่เลือก เป็นไฟล์ Excel (สร้างที่เซิร์ฟเวอร์)
+function openBoardExcel(docs, filter) {
+  const counts = (wh, status, type) => docs.filter((d) => (status === "open" || d.status === status) && (!type || d.req_type === type)
+    && d.lines.some((l) => !wh || l.warehouse_id === Number(wh))).length;
+  openForm({
+    title: "ดาวน์โหลดใบเบิกเป็น Excel",
+    intro: `<p class="hint">รวมรายการที่ขอเบิกจากคลังที่เลือก มี 2 ชีต: สรุปตามรายการสินค้า และรายละเอียดแต่ละใบเบิก</p>`,
+    fields: [
+      { name: "warehouse_id", label: "คลัง", type: "select",
+        options: [["", "ทุกคลัง"], ...warehouses.map((w) => [String(w.id), w.name])] },
+      { name: "status", label: "สถานะใบเบิก", type: "select",
+        options: [["open", "รออนุมัติและอนุมัติแล้ว"], ["pending", "รออนุมัติ"], ["approved", "อนุมัติแล้ว รอจ่าย"]] },
+      { name: "req_type", label: "ประเภทการเบิก", type: "select", value: filter === "all" ? "" : filter,
+        options: [["", "ทั้งหมด"], ["emergency", "ฉุกเฉิน"], ["routine", "ตามรอบปกติ"]] },
+    ],
+    submitLabel: "ดาวน์โหลด Excel",
+    onSubmit: async (d) => {
+      if (!counts(d.warehouse_id, d.status, d.req_type)) throw new Error("ไม่มีใบเบิกที่ขอรายการจากคลังนี้");
+      const a = document.createElement("a");
+      a.href = `/api/requisitions/board/export?${new URLSearchParams(d)}`;
+      a.download = "";
+      document.body.append(a);
+      a.click();
+      a.remove();
+    },
+  });
+}
+
 // ---------- สินค้าและสต็อก (ผู้ดูแล) ----------
 
 async function itemsView() {
@@ -1333,7 +1363,7 @@ async function itemsView() {
   const fields = [
     { name: "code", label: "รหัสสินค้า", required: true, placeholder: "เช่น MED-0001" },
     { name: "name", label: "ชื่อสินค้า", required: true, placeholder: "เช่น ถุงมือยาง ไซส์ M" },
-    { name: "warehouse_id", label: "คลัง", type: "select", required: true, options: [["", "— เลือกคลัง —"], ...warehouses.map((w) => [w.id, w.name])] },
+    { name: "warehouse_id", label: "คลัง", type: "select", options: [["", "— เลือกคลัง —"], ...warehouses.map((w) => [w.id, w.name])] },
     { name: "unit", label: phcMode ? "หน่วยย่อย" : "หน่วยนับ", required: true, list: "units", placeholder: "เช่น กล่อง, ชิ้น, ขวด, รีม", hint: "สินค้าละหน่วยนับเดียว" },
     ...(phcMode ? [{ name: "unit_price", label: "ราคาในหน่วยย่อย (เบิก) บาท", type: "number", min: 0, step: "0.01",
       hint: "ใช้เป็นราคาตั้งต้นตอนจ่ายของ แก้ในใบเบิกได้" }] : []),

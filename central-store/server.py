@@ -1805,6 +1805,57 @@ def analytics_export(ctx, body, query):
     return FileResult(build_xlsx(sheets), XLSX_MIME, f"Dashboard_{d:%d-%m}-{d.year + 543}.xlsx", "attachment")
 
 
+BOARD_STATUS = {"open": ("pending", "approved"), "pending": ("pending",), "approved": ("approved",)}
+
+
+def board_export(ctx, body, query):
+    """ใบเบิกบนหน้าอนุมัติ (รออนุมัติ/อนุมัติแล้ว) เฉพาะรายการของคลังที่เลือก เป็นไฟล์ Excel"""
+    ctx.require_admin()
+    wh = query.get("warehouse_id", [""])[0]
+    wh_name = "ทุกคลัง"
+    if wh:
+        w = one(ctx.conn, "SELECT name FROM warehouses WHERE id = ?", (int(wh),)) if wh.isdigit() else None
+        if not w:
+            raise ApiError(400, "ไม่พบคลังที่เลือก")
+        wh_name = w["name"]
+    req_type = query.get("req_type", [""])[0]
+    statuses = BOARD_STATUS.get(query.get("status", ["open"])[0], BOARD_STATUS["open"])
+    ids = [r[0] for r in ctx.conn.execute(
+        f"SELECT id FROM requisitions WHERE status IN ({','.join('?' * len(statuses))}) ORDER BY created_at, id", statuses)]
+    detail, total = [], {}
+    for doc in (get_req(ctx, i) for i in ids):
+        if req_type in REQ_TYPE_TH and doc["req_type"] != req_type:
+            continue
+        for l in doc["lines"]:
+            if wh and l["warehouse_id"] != int(wh):
+                continue
+            approved = l["qty_approved"] if l["qty_approved"] is not None else l["qty_requested"]
+            detail.append([doc["doc_no"], th_date(doc["created_at"], True), doc["department_name"], doc["requester_name"] or "",
+                           REQ_TYPE_TH.get(doc["req_type"], ""), STATUS[doc["status"]], l["warehouse_name"],
+                           l["code"], l["name"], l["unit"], l["qty_requested"], approved, l["stock"]])
+            t = total.setdefault(l["item_id"], {"line": l, "docs": set(), "req": 0, "appr": 0})
+            t["docs"].add(doc["id"])
+            t["req"] += l["qty_requested"] or 0
+            t["appr"] += approved or 0
+    items = sorted(total.values(), key=lambda t: (t["line"]["warehouse_id"], t["line"]["code"]))
+    summary_rows = [[t["line"]["code"], t["line"]["name"], t["line"]["warehouse_name"], t["line"]["unit"], len(t["docs"]),
+                     t["req"], t["appr"], t["line"]["stock"], "เกินคงเหลือ" if t["appr"] > t["line"]["stock"] else ""] for t in items]
+    status_th = {"open": "รออนุมัติและอนุมัติแล้ว รอจ่าย", "pending": "รออนุมัติ", "approved": "อนุมัติแล้ว รอจ่าย"}
+    sheets = [
+        ("สรุปตามรายการ", [["รหัส", "รายการ", "คลัง", "หน่วย", "จำนวนใบเบิก", "ขอเบิกรวม", "อนุมัติรวม", "คงเหลือ", "หมายเหตุ"]] + summary_rows),
+        ("รายละเอียดใบเบิก", [["เลขที่", "วันที่ส่ง", "หน่วยงาน", "ผู้เบิก", "ประเภท", "สถานะ", "คลัง",
+                              "รหัส", "รายการ", "หน่วย", "ขอเบิก", "อนุมัติ", "คงเหลือ"]] + detail),
+        ("ข้อมูลไฟล์", [["หัวข้อ", "ค่า"], ["คลัง", wh_name],
+                        ["สถานะใบเบิก", status_th[next(k for k, v in BOARD_STATUS.items() if v == statuses)]],
+                        ["ประเภท", REQ_TYPE_TH.get(req_type, "ทั้งหมด")],
+                        ["จำนวนใบเบิก", len({r[0] for r in detail})], ["จำนวนรายการสินค้า", len(items)],
+                        ["ส่งออกเมื่อ", th_date(now(), True)]]),
+    ]
+    d = datetime.now()
+    safe = re.sub(r'[\\/:*?"<>|]', "-", wh_name)
+    return FileResult(build_xlsx(sheets), XLSX_MIME, f"ใบเบิก_{safe}_{d:%d-%m}-{d.year + 543}.xlsx", "attachment")
+
+
 # ---------- เส้นทาง API ----------
 
 ROUTES = []
@@ -1851,6 +1902,7 @@ route("POST", "/items/import", import_items)
 route("GET", "/movements", list_movements)
 route("GET", "/requisitions", list_requisitions)
 route("GET", "/requisitions/board", board)
+route("GET", "/requisitions/board/export", board_export)
 route("POST", "/requisitions", create_requisition)
 route("GET", f"/requisitions/{ID}", get_requisition)
 route("PUT", f"/requisitions/{ID}", update_requisition)
@@ -2026,7 +2078,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def send_file(self, f):
         # เปิดในแท็บใหม่ด้วยตัวอ่าน PDF ของเบราว์เซอร์ (ไม่ใส่ CSP ของหน้าเว็บ เพราะบางเบราว์เซอร์จะแสดง PDF ไม่ได้)
-        ascii_name = re.sub(r"[^A-Za-z0-9._-]", "_", f.filename) if f.filename.isascii() else "document.pdf"
+        ascii_name = re.sub(r"[^A-Za-z0-9._-]", "_", f.filename) if f.filename.isascii() else "document" + Path(f.filename).suffix
         self.send_response(200)
         self.send_header("Content-Type", f.content_type)
         self.send_header("Content-Length", str(len(f.data)))
