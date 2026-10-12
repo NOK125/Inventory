@@ -662,6 +662,20 @@ tr.imp-update td { background: var(--info-soft); }
 .week .u-n { font-size: 11px; font-weight: 700; color: var(--primary); padding-bottom: 2px; }
 .usage-dept { margin-bottom: 14px; }
 .week-labels span { flex: 1; min-width: 0; text-align: center; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+/* ยอดจ่ายออกรายเดือน: แท่งซ้อนตามคลัง กดเลือกเดือนได้ */
+.monthly { margin-bottom: 14px; }
+.weeks.months { gap: 6px; height: 180px; }
+.week.month { border: 0; background: none; padding: 0 0 2px; cursor: pointer; border-radius: 6px 6px 0 0; font: inherit; color: inherit; }
+.week.month:hover, .week.month[aria-pressed="true"] { background: var(--line-soft); }
+.week.month[aria-pressed="true"] .u-n { color: var(--text); }
+.week.month .stack { width: 100%; max-width: 38px; display: flex; flex-direction: column-reverse; border-radius: 4px 4px 0 0; overflow: hidden; }
+.week.month .stack i { display: block; min-height: 2px; }
+.week-labels.months { gap: 6px; }
+.month-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.month-tools select { width: auto; max-width: 100%; }
+.monthly .kpis { margin-bottom: 12px; }
+.monthly .kpi b { font-size: 24px; }
+.month-scroll .table-wrap { max-height: 420px; overflow: auto; }
 .hbar { display: grid; grid-template-columns: 130px minmax(0, 1fr) 70px; gap: 10px; align-items: center; font-size: 13.5px; }
 .hbar > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hbar .track { height: 14px; background: var(--line-soft); border-radius: 99px; overflow: hidden; display: flex; }

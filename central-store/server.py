@@ -1955,6 +1955,61 @@ def usage_stats(conn, end):
     }
 
 
+MONTHS_BACK = 12  # ยอดจ่ายออกรายเดือนย้อนหลังกี่เดือน (รวมเดือนปัจจุบัน)
+ISSUED_SQL = """SELECT substr(r.issued_at, 1, 7) AS month, r.id AS requisition_id, l.qty_issued AS qty,
+        l.qty_issued * COALESCE(l.unit_price, i.unit_price) AS value,
+        i.id AS item_id, i.code, i.name, i.unit, i.warehouse_id, w.name AS warehouse_name
+    FROM lines l JOIN requisitions r ON r.id = l.requisition_id JOIN items i ON i.id = l.item_id JOIN warehouses w ON w.id = i.warehouse_id
+    WHERE r.status = 'issued' AND l.qty_issued > 0"""
+
+
+def month_list(end, n=MONTHS_BACK):
+    """['2025-11', ..., '2026-10'] เดือนล่าสุดอยู่ท้าย"""
+    y, m, out = end.year, end.month, []
+    for _ in range(n):
+        out.append(f"{y:04d}-{m:02d}")
+        y, m = (y, m - 1) if m > 1 else (y - 1, 12)
+    return out[::-1]
+
+
+def monthly_issued(conn, end):
+    """ยอดจ่ายออกจากคลังรายเดือน (ใบที่จ่ายแล้ว นับตามวันที่จ่าย) แยกตามคลัง"""
+    months = month_list(end)
+    lines = rows(conn.execute(ISSUED_SQL + " AND r.issued_at >= ?", (months[0] + "-01",)))
+    out = []
+    for mo in months:
+        mine = [l for l in lines if l["month"] == mo]
+        by_wh = {}
+        for l in mine:
+            b = by_wh.setdefault(l["warehouse_id"], {"warehouse_id": l["warehouse_id"], "lines": 0, "qty": 0, "value": 0})
+            b["lines"] += 1
+            b["qty"] += l["qty"]
+            b["value"] += l["value"] or 0
+        out.append({"month": mo, "docs": len({l["requisition_id"] for l in mine}), "lines": len(mine),
+                    "items": len({l["item_id"] for l in mine}), "qty": sum(l["qty"] for l in mine),
+                    "value": round(sum(l["value"] or 0 for l in mine), 2), "by_warehouse": list(by_wh.values())})
+    return out
+
+
+def issued_items(conn, month):
+    """สินค้าที่จ่ายออกในเดือนนั้น รวมตามรายการ เรียงตามคลังแล้วจำนวนมากไปน้อย"""
+    totals = {}
+    for l in rows(conn.execute(ISSUED_SQL + " AND substr(r.issued_at, 1, 7) = ?", (month,))):
+        t = totals.setdefault(l["item_id"], {k: l[k] for k in ("code", "name", "unit", "warehouse_id", "warehouse_name")}
+                              | {"times": 0, "qty": 0, "value": 0})
+        t["times"] += 1
+        t["qty"] += l["qty"]
+        t["value"] += l["value"] or 0
+    return sorted(totals.values(), key=lambda t: (t["warehouse_id"], -t["qty"], t["code"]))
+
+
+def analytics_issued(ctx, body, query):
+    month = query.get("month", [""])[0]
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
+        raise ApiError(400, "กรุณาเลือกเดือน")
+    return {"month": month, "items": issued_items(ctx.conn, month)}
+
+
 def analytics(ctx, body, query):
     weeks_n = 12
     end = datetime.now()
@@ -2011,6 +2066,7 @@ def analytics(ctx, body, query):
         "from": start_s, "to": end.isoformat(timespec="seconds"), "weeks": weeks,
         "by_warehouse": by_wh, "by_department": by_dept[:6], "top_items": top,
         "idle_since": idle_since, "idle_items": idle,
+        "monthly": monthly_issued(ctx.conn, end),
         "totals": {
             "requisitions": len(docs),
             "emergency": sum(1 for r in docs if r["req_type"] == "emergency"),
@@ -2025,6 +2081,15 @@ def analytics(ctx, body, query):
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 REQ_TYPE_TH = {"emergency": "ฉุกเฉิน", "routine": "ตามรอบปกติ"}
+
+
+TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+
+
+def th_month(ym):
+    """2026-10 -> ต.ค. 2569"""
+    y, m = int(ym[:4]), int(ym[5:7])
+    return f"{TH_MONTHS[m - 1]} {y + 543}"
 
 
 def th_date(ts, with_time=False):
@@ -2126,6 +2191,16 @@ def analytics_export(ctx, body, query):
         ("สินค้าที่เบิกมากที่สุด", [["ลำดับ", "รายการ", "คลัง", "จำนวนครั้งที่เบิก", "จำนวนที่อนุมัติรวม", "หน่วย"]]
          + [[i + 1, it["name"], it["warehouse_name"], it["times"], it["qty"], it["unit"]] for i, it in enumerate(a["top_items"])]),
     ]
+    # ยอดจ่ายออกจากคลังรายเดือน: สรุปต่อเดือน (แยกคลังเป็นคอลัมน์) และรายการสินค้าที่จ่ายในแต่ละเดือน
+    wh_names = {w["id"]: w["name"] for w in ctx.conn.execute("SELECT id, name FROM warehouses ORDER BY id")}
+    sheets.append(("จ่ายออกรายเดือน", [["เดือน", "ใบเบิกที่จ่าย", "รายการที่จ่าย", "ชนิดสินค้า", "มูลค่า (บาท)"]
+                                       + [f"{n} (รายการ)" for n in wh_names.values()]]
+                   + [[th_month(m["month"]), m["docs"], m["lines"], m["items"], m["value"]]
+                      + [next((b["lines"] for b in m["by_warehouse"] if b["warehouse_id"] == wid), 0) for wid in wh_names]
+                      for m in a["monthly"]]))
+    sheets.append(("สินค้าจ่ายออกรายเดือน", [["เดือน", "คลัง", "รหัส", "รายการ", "หน่วย", "จำนวนครั้งที่จ่าย", "จำนวนที่จ่ายรวม", "มูลค่า (บาท)"]]
+                   + [[th_month(m["month"]), it["warehouse_name"], it["code"], it["name"], it["unit"], it["times"], it["qty"], round(it["value"], 2)]
+                      for m in reversed(a["monthly"]) if m["lines"] for it in issued_items(ctx.conn, m["month"])]))
     if ctx.admin:
         waiting = summary(ctx, body, query)["waiting"]
         sheets.append(("ใบเบิกที่ต้องดำเนินการ", [["เลขที่", "วันที่ส่ง", "หน่วยงาน", "ผู้เบิก", "ประเภท", "สถานะ"]]
@@ -2278,6 +2353,7 @@ route("POST", f"/requisitions/{ID}/prices", set_requisition_prices)
 route("GET", "/summary", summary)
 route("GET", "/analytics", analytics)
 route("GET", "/analytics/export", analytics_export)
+route("GET", "/analytics/issued", analytics_issued)
 
 STATIC_TYPES = {
     ".html": "text/html; charset=utf-8",

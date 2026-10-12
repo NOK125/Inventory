@@ -1764,6 +1764,7 @@ async function analyticsView() {
           <div class="track"><div class="fill" style="width:${(w.lines / maxC) * 100}%;--h:${Number(w.hue) || 0}"></div></div><b>${num(w.lines)}</b></div>`).join("")}
       </section>
     </div>
+    ${monthlySection(a.monthly)}
     <div class="charts even">
       <section class="chart">
         <div class="chart-title"><b>หน่วยงานที่เบิกมากที่สุด</b><small>จำนวนใบเบิก · ส่วนสีแดงคือเบิกฉุกเฉิน</small></div>
@@ -1790,6 +1791,75 @@ async function analyticsView() {
           "ทุกรายการมีการเบิกใน 30 วันที่ผ่านมา")}</div></section>
     </div>`;
   bind({ go: (tab) => show(tab), pdf: () => printDashboard(a, s, dur) });
+  wireMonthly(a.monthly);
+}
+
+// ยอดจ่ายออกจากคลังรายเดือน: กราฟแท่งซ้อนตามคลัง + ตารางสินค้าที่จ่ายในเดือนที่เลือก
+const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const thMonth = (ym, short = false) => `${TH_MONTHS[Number(ym.slice(5, 7)) - 1]} ${short ? String(Number(ym.slice(0, 4)) + 543).slice(2) : Number(ym.slice(0, 4)) + 543}`;
+const monthly = { month: "", wh: "" };
+// สีของแต่ละคลังในกราฟซ้อน: ใช้ชุดสีที่ต่างกันชัดเจน (สีประจำคลังบางคู่ใกล้กันเกินไป)
+const STACK_HUES = [175, 35, 265, 135, 350, 215, 85];
+const stackColor = (id) => `oklch(var(--bar-l) 0.13 ${STACK_HUES[Math.max(0, warehouses.findIndex((w) => w.id === id)) % STACK_HUES.length]})`;
+
+function monthlySection(list) {
+  if (!list?.length) return "";
+  const max = Math.max(1, ...list.map((m) => m.lines));
+  const used = warehouses.filter((w) => list.some((m) => m.by_warehouse.some((b) => b.warehouse_id === w.id)));
+  if (!list.some((m) => m.month === monthly.month)) monthly.month = [...list].reverse().find((m) => m.lines)?.month || list[list.length - 1].month;
+  return `<section class="chart monthly" id="monthly">
+    <div class="chart-title"><b>ยอดจ่ายออกจากคลังรายเดือน</b>
+      ${used.map((w) => `<span class="legend"><i style="background:${stackColor(w.id)}"></i>${esc(w.name)}</span>`).join("")}
+      <small>จำนวนรายการที่จ่ายออก (ใบเบิกที่จ่ายแล้ว นับตามวันที่จ่าย) ${list.length} เดือนล่าสุด · กดที่แท่งเพื่อดูรายการสินค้าของเดือนนั้น</small></div>
+    <div class="weeks months">${list.map((m) => `<button type="button" class="week month" data-month="${m.month}" aria-pressed="${m.month === monthly.month}"
+        title="${thMonth(m.month)}: จ่าย ${m.docs} ใบ ${m.lines} รายการ">
+      <span class="u-n">${m.lines || ""}</span>
+      <span class="stack" style="height:${Math.round((m.lines / max) * 150)}px">${m.by_warehouse.map((b) => `<i style="flex:${b.lines};background:${stackColor(b.warehouse_id)}" title="${esc(whOf(b.warehouse_id)?.name || "")}: ${b.lines} รายการ"></i>`).join("")}</span>
+    </button>`).join("")}</div>
+    <div class="week-labels months">${list.map((m, i) => `<span>${i === 0 || m.month.endsWith("-01") ? thMonth(m.month, true) : TH_MONTHS[Number(m.month.slice(5, 7)) - 1]}</span>`).join("")}</div>
+    <div id="month-detail"></div>
+  </section>`;
+}
+
+function wireMonthly(list) {
+  const box = document.getElementById("monthly");
+  if (!box) return;
+  const detail = box.querySelector("#month-detail");
+  let items = [];
+  const drawTable = () => {
+    const m = list.find((x) => x.month === monthly.month);
+    const shown = items.filter((i) => !monthly.wh || String(i.warehouse_id) === monthly.wh);
+    const hasValue = items.some((i) => i.value);
+    const kpi = (label, v, sub) => `<div class="kpi"><span>${label}</span><b>${v}</b><small>${sub}</small></div>`;
+    detail.innerHTML = `<div class="month-tools">
+        <select id="mo-month" aria-label="เลือกเดือน">${[...list].reverse().map((x) => option(x.month, `${thMonth(x.month)}${x.lines ? ` (${num(x.lines)} รายการ)` : ""}`, monthly.month)).join("")}</select>
+        <select id="mo-wh" aria-label="เลือกคลัง">${option("", "ทุกคลัง", monthly.wh)}${warehouses.filter((w) => items.some((i) => i.warehouse_id === w.id))
+          .map((w) => option(w.id, w.name, monthly.wh)).join("")}</select>
+      </div>
+      <div class="kpis">
+        ${kpi("ใบเบิกที่จ่าย", num(m?.docs || 0), "ใบ")}
+        ${kpi("รายการที่จ่าย", num(m?.lines || 0), "รายการ")}
+        ${kpi("ชนิดสินค้า", num(m?.items || 0), "ชนิด")}
+        ${m?.value ? kpi("มูลค่าที่จ่าย", num(Math.round(m.value)), "บาท") : kpi("คลังที่จ่าย", num(m?.by_warehouse.length || 0), "คลัง")}
+      </div>
+      <div class="month-scroll">${table(["คลัง", "รหัส", "รายการ", ["จำนวนครั้ง", "num"], ["จ่ายรวม", "num"], "หน่วย", ...(hasValue ? [["มูลค่า (บาท)", "num"]] : [])],
+        shown.map((i) => [esc(i.warehouse_name), esc(i.code), esc(i.name), [num(i.times), "num"], [`<b>${num(i.qty)}</b>`, "num"], esc(i.unit),
+          ...(hasValue ? [[num(Math.round(i.value * 100) / 100), "num"]] : [])]),
+        `ไม่มีการจ่ายสินค้าในเดือน${thMonth(monthly.month)}`)}</div>`;
+    detail.querySelector("#mo-month").onchange = (e) => load(e.target.value);
+    detail.querySelector("#mo-wh").onchange = (e) => { monthly.wh = e.target.value; drawTable(); };
+  };
+  const load = async (month) => {
+    monthly.month = month;
+    box.querySelectorAll(".month").forEach((b) => b.setAttribute("aria-pressed", b.dataset.month === month));
+    detail.innerHTML = `<p class="empty">กำลังโหลด…</p>`;
+    try { items = (await api("GET", `/analytics/issued?month=${encodeURIComponent(month)}`)).items; }
+    catch (e) { items = []; toast(e.message, true); }
+    if (monthly.wh && !items.some((i) => String(i.warehouse_id) === monthly.wh)) monthly.wh = "";
+    drawTable();
+  };
+  box.querySelector(".months").onclick = (e) => { const b = e.target.closest("[data-month]"); if (b) load(b.dataset.month); };
+  load(monthly.month);
 }
 
 // การใช้งานระบบ (เฉพาะผู้ดูแล): ผู้ใช้ตามช่วงเวลาและหน่วยงาน
@@ -1837,6 +1907,8 @@ function printDashboard(a, s, dur) {
       a.weeks.map((w) => [when(w.start, false), num(w.emergency), num(w.routine), num(w.emergency + w.routine)]))}
     ${sec("สถิติการใช้สินค้าตามประเภทคลัง (จำนวนรายการที่อนุมัติเบิก)", ["คลัง", ["รายการ", "num"]],
       a.by_warehouse.map((w) => [esc(w.name), num(w.lines)]))}
+    ${sec("ยอดจ่ายออกจากคลังรายเดือน (ใบเบิกที่จ่ายแล้ว)", ["เดือน", ["ใบเบิก", "num"], ["รายการ", "num"], ["ชนิดสินค้า", "num"], ["มูลค่า (บาท)", "num"]],
+      [...(a.monthly || [])].reverse().map((m) => [thMonth(m.month), num(m.docs), num(m.lines), num(m.items), m.value ? num(Math.round(m.value)) : "-"]))}
     ${sec("หน่วยงานที่เบิกมากที่สุด", ["หน่วยงาน", ["ใบเบิกทั้งหมด", "num"], ["ฉุกเฉิน", "num"]],
       a.by_department.map((d) => [esc(d.name), num(d.total), num(d.emergency)]))}
     ${sec("สินค้าที่เบิกมากที่สุด (นับจากจำนวนครั้งที่เบิก)", [["ลำดับ", "num"], "รายการ", "คลัง", ["จำนวนครั้ง", "num"], ["จำนวนที่อนุมัติรวม", "num"]],
