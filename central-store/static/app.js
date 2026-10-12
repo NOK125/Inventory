@@ -941,18 +941,30 @@ async function requisitionsView() {
   let saved = null;
   try { saved = sessionStorage.getItem("req-status"); } catch {}
   saved ??= admin ? "approved" : "";
+  let day = "";
+  try { day = sessionStorage.getItem("req-day") || ""; } catch {}
   view.innerHTML = `${pageHead(admin ? "ใบเบิก / จ่ายสินค้า" : "ใบเบิกของหน่วยงาน", {
       sub: admin ? "จ่ายของตามใบเบิกที่อนุมัติแล้ว ดูรายละเอียด และพิมพ์ใบเบิก"
         : `${esc(me.department_name || "")} · แก้ไขหรือยกเลิกได้เฉพาะใบที่ยัง "รออนุมัติ"`,
-      right: `<select id="status" aria-label="กรองตามสถานะ" style="width:auto">${option("", "ทุกสถานะ", saved)}${
+      right: `<div class="day-pick" role="group" aria-label="เลือกวันที่ส่งใบเบิก">
+          <button type="button" class="btn outline small" data-act="day-prev" title="วันก่อนหน้า" aria-label="วันก่อนหน้า">‹</button>
+          <input type="date" id="day" value="${esc(day)}" max="${nowTs().slice(0, 10)}" aria-label="วันที่ส่งใบเบิก" title="ดูเฉพาะใบเบิกที่ส่งในวันนี้">
+          <button type="button" class="btn outline small" data-act="day-next" title="วันถัดไป" aria-label="วันถัดไป">›</button>
+          <button type="button" class="btn outline small" data-act="day-today">วันนี้</button>
+          <button type="button" class="link muted" data-act="day-all" ${day ? "" : "hidden"}>ดูทุกวัน</button>
+        </div>
+        <select id="status" aria-label="กรองตามสถานะ" style="width:auto">${option("", "ทุกสถานะ", saved)}${
         Object.entries(STATUS).map(([k, [t]]) => option(k, t, saved)).join("")}</select>
         <button type="button" class="btn primary" data-act="new">+ เบิกสินค้า</button>`,
     })}<div class="list" id="list"></div>`;
   const lockNote = { approved: "แก้ไขไม่ได้ · คลังกลางอนุมัติแล้ว", issued: "แก้ไขไม่ได้ · จ่ายแล้ว", rejected: "ไม่อนุมัติ", cancelled: "" };
   const load = async () => {
     const status = $("#status").value;
-    try { sessionStorage.setItem("req-status", status); } catch {}
-    const list = await api("GET", `/requisitions${status ? "?status=" + status : ""}`);
+    day = $("#day").value;
+    try { sessionStorage.setItem("req-status", status); sessionStorage.setItem("req-day", day); } catch {}
+    $("[data-act=day-all]").hidden = !day;
+    const qs = new URLSearchParams({ ...(status && { status }), ...(day && { date: day }) }).toString();
+    const list = await api("GET", `/requisitions${qs ? "?" + qs : ""}`);
     const rows = list.map((r) => {
       const act = admin
         ? actions(btn("open", r.status === "pending" ? "พิจารณา" : r.status === "approved" ? "จ่ายของ" : "ดู", r.id,
@@ -965,12 +977,26 @@ async function requisitionsView() {
     });
     $("#list").innerHTML = table(
       ["เลขที่", "วันที่ส่ง", ...(admin ? ["หน่วยงาน", "ผู้เบิก"] : []), "รายการ", "ประเภท", "สถานะ", ""],
-      rows, status ? `ไม่มีใบเบิกสถานะ "${STATUS[status][0]}"` : "ยังไม่มีใบเบิก");
+      rows, `${status ? `ไม่มีใบเบิกสถานะ "${STATUS[status][0]}"` : "ไม่มีใบเบิก"}${day ? ` ที่ส่งวันที่ ${when(day, false)}` : ""}`)
+      + (day ? `<p class="hint day-note">ใบเบิกที่ส่งวันที่ ${when(day, false)} · ${num(list.length)} ใบ</p>` : "");
   };
-  $("#status").onchange = () => load().catch((e) => toast(e.message, true));
+  const reload = () => load().catch((e) => toast(e.message, true));
+  const setDay = (v) => { $("#day").value = v; reload(); };
+  const shift = (n) => {
+    const d = new Date(`${$("#day").value || nowTs().slice(0, 10)}T12:00:00`);
+    d.setDate(d.getDate() + n);
+    const v = d.toISOString().slice(0, 10);
+    if (v <= nowTs().slice(0, 10)) setDay(v);
+  };
+  $("#status").onchange = reload;
+  $("#day").onchange = reload;
   bind({
     open: (id) => openRequisition(id),
     new: () => { if (flow.step === "done") resetFlow(); show("request"); },
+    "day-prev": () => shift(-1),
+    "day-next": () => shift(1),
+    "day-today": () => setDay(nowTs().slice(0, 10)),
+    "day-all": () => setDay(""),
     edit: (id) => startEdit(id),
     cancel: async (id, b) => {
       const doc = b.closest("tr").querySelector("b").textContent;

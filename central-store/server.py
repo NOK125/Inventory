@@ -1207,6 +1207,11 @@ def list_requisitions(ctx, body, query):
     if status:
         sql += " AND r.status = ?"
         params.append(status)
+    # วันที่ส่งใบเบิก (YYYY-MM-DD)
+    day = query.get("date", [""])[0]
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        sql += " AND substr(r.created_at, 1, 10) = ?"
+        params.append(day)
     limit = query.get("limit", ["500"])[0]
     params.append(min(int(limit), 5000) if limit.isdigit() else 500)
     return with_summary(ctx.conn, rows(ctx.conn.execute(sql + " ORDER BY r.id DESC LIMIT ?", params)))

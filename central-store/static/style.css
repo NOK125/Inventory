@@ -490,6 +490,11 @@ input:disabled { background: var(--chip); color: var(--muted); }
 .issue-answer { margin-top: 12px; display: grid; gap: 8px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
 .issue-answer-bar { display: flex; justify-content: flex-end; gap: 8px; }
 .issue-answer-bar select { width: auto; }
+/* เลือกวันที่ในหน้ารายการใบเบิก */
+.day-pick { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.day-pick input[type="date"] { width: auto; }
+.day-pick .btn.small { min-width: 36px; }
+.day-note { margin: 10px 0 0; }
 .stock-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; padding: 14px 18px; margin-bottom: 16px;
   border-radius: var(--radius); background: var(--soft); border: 1px solid var(--soft-line); }
 .stock-status b { font-size: 18px; color: var(--primary); margin-right: auto; }
