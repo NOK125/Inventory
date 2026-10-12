@@ -1942,8 +1942,9 @@ const whenDT = (ts) => `วันที่ ${when(ts, false)} เวลา ${ts.
 
 async function stockView() {
   const admin = me.role === "admin";
-  const reports = await api("GET", "/stock-reports");
+  const [reports, summary] = await Promise.all([api("GET", "/stock-reports"), api("GET", "/stock-reports/summary")]);
   const today = nowTs().slice(0, 10);
+  const sumOf = new Map(summary.map((x) => [x.warehouse_id, x]));
   const byWh = new Map(warehouses.map((w) => [w.id, reports.filter((r) => r.warehouse_id === w.id)]));
   const latest = reports.reduce((a, r) => (!a || r.report_at > a.report_at ? r : a), null);
   const doneToday = warehouses.filter((w) => byWh.get(w.id)[0]?.report_at.slice(0, 10) === today).length;
@@ -1953,6 +1954,7 @@ async function stockView() {
       ${latest ? `<b>สินค้าคงคลัง ณ ${whenDT(latest.report_at)}</b>` : "<b>ยังไม่มีข้อมูลสินค้าคงคลัง</b>"}
       <span>อัปเดตวันนี้แล้ว ${doneToday} จาก ${warehouses.length} คลัง</span>
     </div>
+    ${stockDashHtml(summary)}
     <div class="stock-grid">${warehouses.map((w) => {
       const list = byWh.get(w.id);
       const cur = list[0];
@@ -1961,6 +1963,7 @@ async function stockView() {
         <div class="stock-head">${whIco(w)}<b>${esc(w.name)}</b>
           ${cur ? `<span class="badge ${fresh ? "ok" : "warn"}">${fresh ? "วันนี้" : "ยังไม่อัปเดตวันนี้"}</span>` : ""}</div>
         ${cur ? `<div class="stock-when">ยอด ณ ${whenDT(cur.report_at)}</div>
+          ${stockCountsHtml(sumOf.get(w.id))}
           <a class="btn outline block" href="${stockFileUrl(cur)}" target="_blank" rel="noopener"><span class="tag">PDF</span>เปิดยอดคงคลัง</a>
           ${list.length > 1 ? `<select class="stock-old" aria-label="ดูยอดวันก่อนหน้า ${esc(w.name)}">
             <option value="">ดูวันก่อนหน้า (${list.length - 1})</option>
@@ -1973,6 +1976,7 @@ async function stockView() {
       </section>`;
     }).join("")}</div>`;
 
+  wireStockDash(summary);
   view.onchange = (e) => {
     if (!e.target.matches(".stock-old") || !e.target.value) return;
     window.open(stockFileUrl({ id: e.target.value }), "_blank", "noopener");
@@ -1980,6 +1984,12 @@ async function stockView() {
   };
   bind({
     up: (id) => uploadStockReport(whOf(id)),
+    "stock-list": (id) => {
+      const sel = document.getElementById("sd-wh");
+      sel.value = id;
+      sel.dispatchEvent(new Event("change", { bubbles: false }));
+      document.getElementById("stock-dash").scrollIntoView({ behavior: "smooth", block: "start" });
+    },
     del: async (id) => {
       const r = reports.find((x) => String(x.id) === String(id));
       if (!confirm(`ลบไฟล์ยอดคงคลัง ${whOf(r.warehouse_id)?.name} ${whenDT(r.report_at)}?`)) return;
@@ -1987,6 +1997,78 @@ async function stockView() {
       catch (err) { toast(err.message, true); }
     },
   });
+}
+
+// ภาพรวมสินค้าคงเหลือ อ่านจากไฟล์ PDF ล่าสุดของแต่ละคลัง
+const STOCK_SHOW = 300;
+const stockDash = { q: "", wh: "", f: "all" };
+const stockRowsOf = (summary) => summary.flatMap((x) => x.items.map((i) => ({ ...i, warehouse_id: x.warehouse_id })));
+const stockDelta = (i) => (i.prev_qty == null || i.qty == null ? null : i.qty - i.prev_qty);
+
+function stockCountsHtml(x) {
+  if (!x) return "";
+  if (!x.items.length) return `<div class="stock-counts muted">อ่านรายการจากไฟล์นี้ไม่ได้ · เปิดดูจาก PDF</div>`;
+  const out = x.items.filter((i) => !i.qty).length;
+  return `<div class="stock-counts"><span><b>${num(x.items.length)}</b> รายการ</span>
+    <span class="ok"><b>${num(x.items.length - out)}</b> มีของ</span><span class="bad"><b>${num(out)}</b> หมด</span>
+    <button type="button" class="link" data-act="stock-list" data-id="${x.warehouse_id}">ดูรายการ</button></div>`;
+}
+
+function stockDashHtml(summary) {
+  const all = stockRowsOf(summary);
+  if (!all.length) return "";
+  const out = all.filter((i) => !i.qty).length;
+  const changed = all.filter((i) => stockDelta(i)).length;
+  const value = all.reduce((a, i) => a + (Number(i.value) || 0), 0);
+  const kpi = (label, v, sub, cls = "") => `<div class="kpi"><span>${label}</span><b class="${cls}">${v}</b><small>${sub}</small></div>`;
+  const chip = (k, t) => `<button type="button" class="chip" data-f="${k}" aria-pressed="${stockDash.f === k}">${t}</button>`;
+  return `<section class="panel stock-dash" id="stock-dash">
+    <div class="stock-dash-head"><b>สินค้าคงเหลือ</b><span>อ่านจากไฟล์ PDF ล่าสุดของ ${summary.filter((x) => x.items.length).length} คลัง</span></div>
+    <div class="kpis">
+      ${kpi("รายการทั้งหมด", num(all.length), "รายการ", "tone-brand")}
+      ${kpi("มีคงเหลือ", num(all.length - out), "รายการ")}
+      ${kpi("หมด (คงเหลือ 0)", num(out), "รายการ", out ? "tone-bad" : "")}
+      ${value ? kpi("มูลค่าคงคลังรวม", num(Math.round(value)), "บาท") : kpi("เปลี่ยนจากไฟล์ก่อนหน้า", num(changed), "รายการ")}
+    </div>
+    <div class="stock-tools">
+      <input type="search" id="sd-q" placeholder="ค้นหารหัส ชื่อ หรือ Location" aria-label="ค้นหาสินค้าคงเหลือ" value="${esc(stockDash.q)}">
+      <select id="sd-wh" aria-label="เลือกคลัง">${option("", "ทุกคลัง", stockDash.wh)}${summary.map((x) => option(x.warehouse_id, whOf(x.warehouse_id)?.name || "", stockDash.wh)).join("")}</select>
+      <div class="chips" id="sd-f">${chip("all", "ทั้งหมด")}${chip("has", "มีของ")}${chip("out", "หมด")}${chip("changed", "เปลี่ยนจากไฟล์ก่อน")}</div>
+    </div>
+    <div id="sd-table"></div>
+  </section>`;
+}
+
+function wireStockDash(summary) {
+  const box = document.getElementById("stock-dash");
+  if (!box) return;
+  const all = stockRowsOf(summary);
+  const draw = () => {
+    const q = stockDash.q.trim().toLowerCase();
+    const hits = all.filter((i) => (!stockDash.wh || String(i.warehouse_id) === String(stockDash.wh))
+      && (stockDash.f === "all" || (stockDash.f === "has" ? i.qty > 0 : stockDash.f === "out" ? !i.qty : stockDelta(i)))
+      && (!q || `${i.code} ${i.name} ${i.location}`.toLowerCase().includes(q)));
+    const delta = (i) => {
+      const d = stockDelta(i);
+      return d == null ? ["-", "num muted"] : d === 0 ? ["0", "num muted"] : [`${d > 0 ? "+" : ""}${num(d)}`, `num ${d > 0 ? "ok" : "bad"}`];
+    };
+    document.getElementById("sd-table").innerHTML = table(
+      ["คลัง", "รหัส", "รายการ", ["คงเหลือ", "num"], "หน่วย", ["เทียบไฟล์ก่อน", "num"], "Location"],
+      hits.slice(0, STOCK_SHOW).map((i) => [esc(whOf(i.warehouse_id)?.name || ""), esc(i.code), esc(i.name),
+        [i.qty ? num(i.qty) : `<span class="bad">0</span>`, "num"], esc(i.unit || i.form || ""), delta(i), esc(i.location || "")]),
+      "ไม่พบรายการ") + (hits.length > STOCK_SHOW ? `<p class="hint">แสดง ${num(STOCK_SHOW)} จาก ${num(hits.length)} รายการ · พิมพ์ค้นหาหรือเลือกคลังเพื่อให้แคบลง</p>`
+      : `<p class="hint">${num(hits.length)} รายการ</p>`);
+  };
+  box.querySelector("#sd-q").oninput = (e) => { stockDash.q = e.target.value; draw(); };
+  box.querySelector("#sd-wh").onchange = (e) => { stockDash.wh = e.target.value; draw(); };
+  box.querySelector("#sd-f").onclick = (e) => {
+    const c = e.target.closest("[data-f]");
+    if (!c) return;
+    stockDash.f = c.dataset.f;
+    box.querySelectorAll("#sd-f .chip").forEach((x) => x.setAttribute("aria-pressed", x === c));
+    draw();
+  };
+  draw();
 }
 
 function uploadStockReport(w) {
@@ -2001,8 +2083,9 @@ function uploadStockReport(w) {
     if (!file) throw new Error("กรุณาเลือกไฟล์ PDF");
     if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") throw new Error("รองรับเฉพาะไฟล์ PDF");
     if (file.size > GUIDE_MAX_MB * 1024 * 1024) throw new Error(`ไฟล์ใหญ่เกิน ${GUIDE_MAX_MB} MB`);
-    await api("POST", "/stock-reports", { warehouse_id: w.id, report_at: d.report_at, file_name: file.name, file_data: await fileBase64(file) });
-    toast(`อัปโหลดยอดคงคลัง ${w.name} แล้ว`);
+    const r = await api("POST", "/stock-reports", { warehouse_id: w.id, report_at: d.report_at, file_name: file.name, file_data: await fileBase64(file) });
+    toast(r.item_count ? `อัปโหลดยอดคงคลัง ${w.name} แล้ว · อ่านได้ ${num(r.item_count)} รายการ`
+      : `อัปโหลด ${w.name} แล้ว แต่อ่านรายการจากไฟล์นี้ไม่ได้ (ยังเปิดดู PDF ได้)`, !r.item_count);
     refresh();
   });
 }

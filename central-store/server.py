@@ -15,11 +15,13 @@ import os
 import re
 import secrets
 import sqlite3
+import struct
 import sys
 import traceback
 import webbrowser
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -270,6 +272,9 @@ def init_one(system):
             conn.execute("ALTER TABLE items ADD COLUMN unit_price REAL")
         if "system" not in {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}:
             conn.execute("ALTER TABLE sessions ADD COLUMN system TEXT NOT NULL DEFAULT 'hospital'")
+        # รายการสินค้าที่อ่านจากไฟล์ PDF ยอดคงคลัง (JSON) ว่าง = ยังไม่ได้อ่าน
+        if "items_json" not in {r["name"] for r in conn.execute("PRAGMA table_info(stock_reports)")}:
+            conn.execute("ALTER TABLE stock_reports ADD COLUMN items_json TEXT")
         # เพิ่มคลังตั้งต้นที่ยังไม่มี (ฐานข้อมูลเดิมได้คลังใหม่อัตโนมัติ ไม่แตะคลังที่มีอยู่)
         conn.executemany("INSERT OR IGNORE INTO warehouses (code, name, initials, hue, description) VALUES (?, ?, ?, ?, ?)",
                          DEFAULT_WAREHOUSES)
@@ -1470,6 +1475,308 @@ def reply_issue(ctx, body, query, iid):
     return get_issue(ctx, iid)
 
 
+# ---------- อ่านตารางยอดคงคลังจาก PDF (Microsoft Print to PDF) ----------
+# ใช้แค่ไลบรารีมาตรฐาน: แตก stream, แปลงรหัสตัวอักษรผ่าน ToUnicode/cmap/GSUB ของฟอนต์ที่ฝังมา
+# แล้วจัดตัวอักษรเป็นแถวและช่องตามตำแหน่งบนหน้า
+
+# อักษรไทยรูปแปรใน Private Use Area ของฟอนต์ Windows → อักษรปกติ
+THAI_PUA = {0xF700: "ฐ", 0xF701: "ิ", 0xF702: "ี", 0xF703: "ึ", 0xF704: "ื", 0xF705: "่", 0xF706: "้", 0xF707: "๊",
+            0xF708: "๋", 0xF709: "์", 0xF70A: "่", 0xF70B: "้", 0xF70C: "๊", 0xF70D: "๋", 0xF70E: "์", 0xF70F: "ญ",
+            0xF710: "ั", 0xF711: "ํ", 0xF712: "็", 0xF713: "่", 0xF714: "้", 0xF715: "๊", 0xF716: "๋", 0xF717: "์",
+            0xF718: "ุ", 0xF719: "ู", 0xF71A: "ฺ"}
+THAI_VOWEL_MARKS = set("ัิีึืฺุู็ํ")
+THAI_TONE_MARKS = set("่้๊๋์")
+PDF_NUM = rb"[-+]?(?:\d+\.?\d*|\.\d+)"
+
+
+def _u16(b, o):
+    return struct.unpack(">H", b[o:o + 2])[0]
+
+
+def _mat(a, b):
+    return [a[0] * b[0] + a[1] * b[2], a[0] * b[1] + a[1] * b[3], a[2] * b[0] + a[3] * b[2],
+            a[2] * b[1] + a[3] * b[3], a[4] * b[0] + a[5] * b[2] + b[4], a[4] * b[1] + a[5] * b[3] + b[5]]
+
+
+def _ttf_tables(font):
+    n = _u16(font, 4)
+    return {font[12 + i * 16:16 + i * 16]: struct.unpack(">I", font[20 + i * 16:24 + i * 16])[0] for i in range(n)}
+
+
+def _ttf_cmap(font, tables):
+    """GID → ตัวอักษร จากตาราง cmap (format 4) ของฟอนต์"""
+    out, off = {}, tables.get(b"cmap")
+    if off is None:
+        return out
+    for i in range(_u16(font, off + 2)):
+        pid, eid, sub = struct.unpack(">HHI", font[off + 4 + i * 8:off + 12 + i * 8])
+        t = off + sub
+        if pid != 3 or eid not in (0, 1) or _u16(font, t) != 4:
+            continue
+        seg = _u16(font, t + 6) // 2
+        ends = [_u16(font, t + 14 + k * 2) for k in range(seg)]
+        p = t + 16 + seg * 2
+        for k in range(seg):
+            start, delta = _u16(font, p + k * 2), struct.unpack(">h", font[p + seg * 2 + k * 2:p + seg * 2 + k * 2 + 2])[0]
+            ro = p + seg * 4 + k * 2
+            rng = _u16(font, ro)
+            for c in range(start, min(ends[k], 0xFFFE) + 1):
+                if rng:
+                    g = _u16(font, ro + rng + (c - start) * 2)
+                    g = (g + delta) & 0xFFFF if g else 0
+                else:
+                    g = (c + delta) & 0xFFFF
+                if g:
+                    out.setdefault(g, THAI_PUA.get(c, chr(c)))
+    return out
+
+
+def _ttf_gsub_sources(font, tables):
+    """glyph ที่ได้จากการแทนรูป (GSUB) → glyph ต้นทาง เช่น วรรณยุกต์ที่ขยับตำแหน่ง → วรรณยุกต์ปกติ"""
+    out, g = {}, tables.get(b"GSUB")
+    if g is None:
+        return out
+
+    def coverage(o):
+        if _u16(font, o) == 1:
+            return [_u16(font, o + 4 + i * 2) for i in range(_u16(font, o + 2))]
+        res = []
+        for i in range(_u16(font, o + 2)):
+            res += range(_u16(font, o + 4 + i * 6), _u16(font, o + 6 + i * 6) + 1)
+        return res
+
+    ll = g + _u16(font, g + 8)
+    for i in range(_u16(font, ll)):
+        lo = ll + _u16(font, ll + 2 + i * 2)
+        for j in range(_u16(font, lo + 4)):
+            so, typ = lo + _u16(font, lo + 6 + j * 2), _u16(font, lo)
+            if typ == 7:
+                typ, so = _u16(font, so + 2), so + struct.unpack(">I", font[so + 4:so + 8])[0]
+            if typ == 1:
+                fmt, cov = _u16(font, so), coverage(so + _u16(font, so + 2))
+                delta = struct.unpack(">h", font[so + 4:so + 6])[0]
+                for k, gl in enumerate(cov):
+                    out.setdefault((gl + delta) & 0xFFFF if fmt == 1 else _u16(font, so + 6 + k * 2), [gl])
+            elif typ == 4:
+                for k, first in enumerate(coverage(so + _u16(font, so + 2))):
+                    ls = so + _u16(font, so + 6 + k * 2)
+                    for m in range(_u16(font, ls)):
+                        lg = ls + _u16(font, ls + 2 + m * 2)
+                        out.setdefault(_u16(font, lg), [first] + [_u16(font, lg + 4 + q * 2) for q in range(_u16(font, lg + 2) - 1)])
+    return out
+
+
+def _thai_cell(glyphs):
+    """[(x, กว้าง, ตัวอักษร)] → ข้อความ โดยวางสระบน/ล่างและวรรณยุกต์ไว้หลังพยัญชนะที่มันซ้อนอยู่"""
+    bases, marks = [], []
+    for x, w, ch in glyphs:
+        (marks if ch and ch[0] in THAI_VOWEL_MARKS | THAI_TONE_MARKS else bases).append((x, w, ch))
+    bases.sort(key=lambda g: g[0])
+    extra = [[] for _ in bases]
+    for x, w, ch in marks:
+        # พยัญชนะตัวที่ครอบตำแหน่งกลางของเครื่องหมาย ถ้าไม่มีใช้ตัวที่เริ่มก่อนใกล้ที่สุด
+        mid = x + w / 2
+        k = next((i for i, (bx, bw, _) in enumerate(bases) if bx - 0.5 <= mid <= bx + bw + 0.5), None)
+        if k is None:
+            before = [i for i, (bx, _, _) in enumerate(bases) if bx <= x + 0.5]
+            k = before[-1] if before else 0
+        if bases:
+            extra[k].append(ch)
+        else:
+            bases.append((x, w, ch)); extra.append([])
+    s = ""
+    for (x, w, ch), ex in zip(bases, extra):
+        s += ch + "".join(sorted(ex, key=lambda c: c in THAI_TONE_MARKS))
+    s = re.sub("ํ([่้๊๋]?)า", r"\1ำ", s)  # นิคหิต + า = สระอำ
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def pdf_text_rows(data):
+    """คืน [(หน้า, y, [(x ซ้าย, x ขวา, ข้อความ), ...])] เรียงจากบนลงล่าง ช่องแยกตามช่องว่างระหว่างตัวอักษร"""
+    objs = {int(m.group(1)): m.group(2) for m in re.finditer(rb"(\d+)\s+0\s+obj(.*?)endobj", data, re.S)}
+
+    def stream(n):
+        v = objs.get(n, b"")
+        m = re.search(rb"stream\r?\n(.*?)\r?\nendstream", v, re.S)
+        if not m:
+            return b""
+        return zlib.decompress(m.group(1)) if b"FlateDecode" in v.split(b"stream")[0] else m.group(1)
+
+    def ref(v, key):
+        m = re.search(rb"/" + key + rb"\s+(\d+)\s+0\s+R", v)
+        return int(m.group(1)) if m else None
+
+    def font_info(n):
+        v = objs[n]
+        uni = {}
+        if ref(v, b"ToUnicode"):
+            s = stream(ref(v, b"ToUnicode")).decode("latin1")
+            for blk in re.findall(r"beginbfchar(.*?)endbfchar", s, re.S):
+                for a, b in re.findall(r"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>", blk):
+                    uni[int(a, 16)] = bytes.fromhex(b).decode("utf-16-be", "replace")
+            for blk in re.findall(r"beginbfrange(.*?)endbfrange", s, re.S):
+                for a, b, c in re.findall(r"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>", blk):
+                    for i in range(int(a, 16), int(b, 16) + 1):
+                        uni[i] = chr(int(c, 16) + i - int(a, 16))
+        uni = {k: "".join(THAI_PUA.get(ord(c), c) for c in s) for k, s in uni.items()}
+        cmap, gsub = {}, {}
+        if ref(v, b"FontFile2"):
+            font = stream(ref(v, b"FontFile2"))
+            try:
+                tables = _ttf_tables(font)
+                cmap, gsub = _ttf_cmap(font, tables), _ttf_gsub_sources(font, tables)
+            except (struct.error, IndexError):
+                pass
+        known = {**cmap, **uni}
+
+        def char(cid, depth=0):
+            if cid in known:
+                return known[cid]
+            if depth < 4 and cid in gsub:
+                return "".join(char(g, depth + 1) for g in gsub[cid])
+            # glyph ที่ไม่มีข้อมูล: เดาจาก glyph ข้างเคียงที่เป็นวรรณยุกต์ไทยเรียงกัน (เช่น ่ ้ ๊ ๋)
+            for d in (1, 2, 3):
+                p = known.get(cid - d)
+                if p and len(p) == 1 and "่" <= p <= "๋" and ord(p) + d <= 0x0E4B:
+                    return chr(ord(p) + d)
+            return ""
+
+        widths, w = {}, ref(v, b"W")
+        warr = objs[w] if w else (re.search(rb"/W\s*(\[.*?\]\s*\])", v, re.S) or [b"", b""])[1]
+        toks = re.findall(rb"\[|\]|" + PDF_NUM, warr)
+        i = 1 if toks[:1] == [b"["] else 0
+        while i + 1 < len(toks) and toks[i] != b"]":
+            a = int(float(toks[i]))
+            if toks[i + 1] == b"[":
+                i += 2
+                while i < len(toks) and toks[i] != b"]":
+                    widths[a] = float(toks[i]); a += 1; i += 1
+                i += 1
+            else:
+                for c in range(a, int(float(toks[i + 1])) + 1):
+                    widths[c] = float(toks[i + 2])
+                i += 3
+        dw = re.search(rb"/DW\s+(" + PDF_NUM + rb")", v)
+        return {}, char, widths, float(dw.group(1)) if dw else 1000.0
+
+    tok = re.compile(rb"\[(?:<[0-9A-Fa-f]*>|" + PDF_NUM + rb"|\s)*\]|<[0-9A-Fa-f]*>|/[^\s/\[\]<>()]+|" + PDF_NUM + rb"|[A-Za-z*'\"]+")
+    pages_obj = next((v for v in objs.values() if re.search(rb"/Type\s*/Pages\b", v)), b"")
+    kids = re.search(rb"/Kids\s*\[([^\]]*)\]", pages_obj)
+    page_ids = [int(x) for x in re.findall(rb"(\d+)\s+0\s+R", kids.group(1))] if kids else []
+    fonts, out = {}, []
+    for pno, pg in enumerate(page_ids, 1):
+        pv = objs.get(pg, b"")
+        res = objs.get(ref(pv, b"Resources"), pv)
+        fmap = {}
+        for k, n in re.findall(rb"/(\w+)\s+(\d+)\s+0\s+R", res):
+            if re.search(rb"/Subtype\s*/Type0", objs.get(int(n), b"")):
+                if int(n) not in fonts:
+                    fonts[int(n)] = font_info(int(n))
+                fmap[k.decode()] = fonts[int(n)]
+        cm = re.search(rb"/Contents\s*\[([^\]]*)\]", pv)
+        content = b"\n".join(stream(int(n)) for n in (re.findall(rb"(\d+)\s+0\s+R", cm.group(1)) if cm else [ref(pv, b"Contents") or 0]))
+        ctm, stack, tm, tlm, font, size, args, glyphs = [1, 0, 0, 1, 0, 0], [], None, None, None, 1.0, [], []
+        for t in tok.findall(content):
+            if t[:1] in b"[</" or re.fullmatch(PDF_NUM, t):
+                args.append(t)
+                continue
+            op = t.decode("latin1")
+            try:
+                if op == "q":
+                    stack.append(ctm[:])
+                elif op == "Q" and stack:
+                    ctm = stack.pop()
+                elif op == "cm":
+                    ctm = _mat([float(x) for x in args[-6:]], ctm)
+                elif op == "BT":
+                    tm = tlm = [1, 0, 0, 1, 0, 0]
+                elif op == "Tf":
+                    font, size = fmap.get(args[-2][1:].decode()), float(args[-1])
+                elif op == "Tm":
+                    tm = tlm = [float(x) for x in args[-6:]]
+                elif op in ("Td", "TD"):
+                    tm = tlm = _mat([1, 0, 0, 1, float(args[-2]), float(args[-1])], tlm)
+                elif op in ("Tj", "TJ") and font and tm:
+                    _, char, widths, dw = font
+                    for hx, adj in re.findall(rb"<([0-9A-Fa-f]*)>|(" + PDF_NUM + rb")", args[-1]):
+                        if adj:
+                            tm = _mat([1, 0, 0, 1, -float(adj) / 1000 * size, 0], tm)
+                            continue
+                        for i in range(0, len(hx) - 3, 4):
+                            cid = int(hx[i:i + 4], 16)
+                            w = widths.get(cid, dw) / 1000 * size
+                            m = _mat(tm, ctm)
+                            scale = (m[0] ** 2 + m[1] ** 2) ** 0.5
+                            glyphs.append((m[5], m[4], w * scale, char(cid)))
+                            tm = _mat([1, 0, 0, 1, w, 0], tm)
+            except (IndexError, ValueError, TypeError, KeyError):
+                pass
+            args = []
+        rows = []
+        for y, x, w, ch in glyphs:
+            if not ch:
+                continue
+            r = next((r for r in rows if abs(r[0] - y) < 2.5), None)
+            if r is None:
+                rows.append(r := [y, []])
+            r[1].append((x, w, ch))
+        for y, gl in sorted(rows, key=lambda r: -r[0]):
+            cells, end = [], None
+            for g in sorted(gl, key=lambda g: g[0]):
+                if end is None or g[0] - end > 3.5:
+                    cells.append([])
+                cells[-1].append(g)
+                end = max(end if end is not None else g[0], g[0] + g[1])
+            row = []
+            for c in cells:
+                text = _thai_cell(c)
+                if text:
+                    row.append((round(min(g[0] for g in c), 1), round(max(g[0] + g[1] for g in c), 1), text))
+            if row:
+                out.append((pno, round(y, 1), row))
+    return out
+
+
+STOCK_QTY_RE = re.compile(r"^([\d,]+(?:\.\d+)?)\s*x\s*([\d,]+(?:\.\d+)?)\s*(.*)$")
+STOCK_NUM_RE = re.compile(r"^-?[\d,]+(?:\.\d+)?$")
+
+
+def _num(s):
+    try:
+        v = float(s.replace(",", ""))
+        return int(v) if v.is_integer() else v
+    except ValueError:
+        return None
+
+
+def parse_stock_pdf(data):
+    """PDF รายงานปริมาณเวชภัณฑ์คงคลัง → {"items": [...], "report_date": "...", "pages": n}"""
+    rows = pdf_text_rows(data)
+    items, report_date = [], ""
+    for _, _, cells in rows:
+        texts = [c[2] for c in cells]
+        joined = " ".join(texts)
+        if not report_date:
+            m = re.search(r"(\d{1,2}/\d{1,2}/\d{4})(?:\s*เวลา\s*(\d{1,2}:\d{2}))?", joined)
+            if m and "วันที่" in joined:
+                report_date = m.group(1) + (f" {m.group(2)}" if m.group(2) else "")
+        qi = next((i for i, t in enumerate(texts) if STOCK_QTY_RE.match(t)), None)
+        if qi is None or qi < 2:
+            continue
+        m = re.match(r"^(\d+)\.(\S+)$", texts[0])
+        code = m.group(2) if m else texts[0]
+        name = texts[1]
+        form = " ".join(texts[2:qi])
+        qm = STOCK_QTY_RE.match(texts[qi])
+        qty, pack, unit = _num(qm.group(1)), _num(qm.group(2)), qm.group(3).strip() or form
+        rest = texts[qi + 1:]
+        nums = [_num(t) for t in rest if STOCK_NUM_RE.match(t)]
+        location = " ".join(t for t in rest if not STOCK_NUM_RE.match(t))
+        items.append({"code": code, "name": name, "form": form, "qty": qty, "pack": pack, "unit": unit,
+                      "value": nums[-1] if nums else None, "location": location})
+    return {"items": items, "report_date": report_date, "pages": len({r[0] for r in rows})}
+
+
 # ---------- สินค้าคงคลังรายวัน: ไฟล์ PDF ยอดคงคลังแยกตามคลัง ----------
 
 STOCK_KEEP_DAYS = 14  # เก็บไฟล์ต่อคลังย้อนหลังกี่วัน (เก่ากว่านี้ลบอัตโนมัติ เพื่อไม่ให้ฐานข้อมูลและไฟล์สำรองโตเร็ว)
@@ -1500,7 +1807,42 @@ def create_stock_report(ctx, body, query):
                            (int(wh), report_at, name, len(data), data, now(), ctx.user["id"])).lastrowid
     cutoff = (datetime.now() - timedelta(days=STOCK_KEEP_DAYS)).isoformat(timespec="seconds")
     ctx.conn.execute("DELETE FROM stock_reports WHERE warehouse_id = ? AND report_at < ? AND id != ?", (int(wh), cutoff, sid))
-    return one(ctx.conn, STOCK_SQL + " WHERE s.id = ?", (sid,))
+    parsed = stock_report_items(ctx.conn, sid)
+    return {**one(ctx.conn, STOCK_SQL + " WHERE s.id = ?", (sid,)), "item_count": len(parsed["items"]), "pdf_date": parsed["report_date"]}
+
+
+def stock_report_items(conn, sid):
+    """รายการสินค้าในไฟล์ PDF ยอดคงคลัง อ่านครั้งแรกแล้วเก็บผลไว้ (ไฟล์ที่อ่านไม่ได้คืนรายการว่าง)"""
+    s = one(conn, "SELECT items_json, file_data FROM stock_reports WHERE id = ?", (sid,))
+    if not s:
+        return {"items": [], "report_date": ""}
+    if s["items_json"]:
+        return json.loads(s["items_json"])
+    try:
+        parsed = parse_stock_pdf(bytes(s["file_data"]))
+    except Exception:  # noqa: BLE001 — ไฟล์ PDF รูปแบบอื่นที่อ่านไม่ได้ ยังเปิดดูไฟล์ได้ตามปกติ
+        traceback.print_exc()
+        parsed = {"items": [], "report_date": "", "pages": 0}
+    conn.execute("UPDATE stock_reports SET items_json = ? WHERE id = ?", (json.dumps(parsed, ensure_ascii=False), sid))
+    return parsed
+
+
+def stock_summary(ctx, body, query):
+    """ยอดคงเหลือล่าสุดของแต่ละคลังจากไฟล์ PDF พร้อมยอดจากไฟล์ก่อนหน้าไว้เทียบ"""
+    out = []
+    for (wid,) in ctx.conn.execute("SELECT id FROM warehouses ORDER BY id").fetchall():
+        reps = rows(ctx.conn.execute("SELECT id, report_at FROM stock_reports WHERE warehouse_id = ? ORDER BY report_at DESC, id DESC LIMIT 2",
+                                     (wid,)))
+        if not reps:
+            continue
+        cur = stock_report_items(ctx.conn, reps[0]["id"])
+        prev = {}
+        if len(reps) > 1:
+            prev = {i["code"]: i["qty"] for i in stock_report_items(ctx.conn, reps[1]["id"])["items"]}
+        out.append({"warehouse_id": wid, "report_id": reps[0]["id"], "report_at": reps[0]["report_at"],
+                    "pdf_date": cur["report_date"], "prev_report_at": reps[1]["report_at"] if len(reps) > 1 else None,
+                    "items": [{**i, "prev_qty": prev.get(i["code"])} for i in cur["items"]]})
+    return out
 
 
 def delete_stock_report(ctx, body, query, sid):
@@ -1923,6 +2265,7 @@ route("POST", "/guidelines", create_guideline)
 route("DELETE", f"/guidelines/{ID}", delete_guideline)
 route("GET", f"/guidelines/{ID}/file", guideline_file)
 route("GET", "/stock-reports", list_stock_reports)
+route("GET", "/stock-reports/summary", stock_summary)
 route("POST", "/stock-reports", create_stock_report)
 route("DELETE", f"/stock-reports/{ID}", delete_stock_report)
 route("GET", f"/stock-reports/{ID}/file", stock_report_file)
