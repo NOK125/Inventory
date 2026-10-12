@@ -1352,7 +1352,7 @@ def set_requisition_people(ctx, body, query, req_id):
     require_status(doc, "pending", "approved", "issued", "rejected")
     # ชื่อที่ต้องมีตามสถานะ (เหมือนตอนอนุมัติ/จ่าย) ตำแหน่งเว้นว่างได้
     need = {"requester": True, "approver": doc["status"] in ("approved", "issued", "rejected"),
-            "issuer": doc["status"] == "issued", "receiver": doc["status"] == "issued"}
+            "issuer": doc["status"] == "issued", "receiver": False}
     label = {"requester": "ชื่อผู้เบิก", "approver": "ชื่อผู้อนุมัติ", "issuer": "ชื่อผู้จ่าย", "receiver": "ชื่อผู้รับ"}
     values = {}
     for role, required in need.items():
@@ -1887,7 +1887,7 @@ def issue_requisition(ctx, body, query, req_id):
     doc = get_req(ctx, req_id)
     require_status(doc, "approved")
     issuer = text(body.get("issuer_name"), "ชื่อผู้จ่าย", True)
-    receiver = text(body.get("receiver_name"), "ชื่อผู้รับ", True)
+    receiver = text(body.get("receiver_name"), "ชื่อผู้รับ")  # ผู้รับเว้นว่างได้ (เขียนชื่อบนใบที่พิมพ์ทีหลังได้)
     qty = line_qty(doc, body.get("lines"), "qty_issued", "qty_approved", cap="qty_approved")
     save_prices(ctx, doc, body.get("lines"))
     # จ่ายได้ตามจำนวนที่ต้องการแม้คงเหลือในระบบไม่พอ: คงเหลือหยุดที่ 0 ไม่ติดลบ และประวัติสต็อกบันทึกส่วนที่ขาด

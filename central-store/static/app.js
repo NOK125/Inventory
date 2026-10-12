@@ -194,7 +194,7 @@ const ROLES = [
   { key: "requester", label: "ผู้เบิก", hint: "ผู้ส่งใบเบิก", kind: "requester", required: true },
   { key: "approver", label: "ผู้อนุมัติ", hint: "เว้นว่างได้ คลังกลางเลือกตอนอนุมัติ", kind: "central" },
   { key: "issuer", label: "ผู้จ่าย", hint: "เว้นว่างได้ คลังกลางเลือกตอนจ่าย", kind: "central" },
-  { key: "receiver", label: "ผู้รับ", hint: "ผู้มารับของที่คลัง", kind: "receiver" },
+  { key: "receiver", label: "ผู้รับ", hint: "เว้นว่างได้ · ผู้มารับของที่คลัง", kind: "receiver" },
 ];
 const REG_NAME = { requester: "ทะเบียนผู้เบิกสินค้า", receiver: "ทะเบียนผู้รับสินค้า", central: "ทะเบียนเจ้าหน้าที่คลังกลาง" };
 const scopeOf = (kind) => (kind === "central" ? "central" : "dept");
@@ -290,10 +290,10 @@ function wireValues(form, doc) {
 }
 
 // ช่องเลือกชื่อจากทะเบียน ค่าที่ส่งคือชื่อ-นามสกุล ตำแหน่งดึงจากทะเบียน
-function personSelect(name, label, list, selected, hint = "") {
-  const opts = [["", "— เลือกชื่อ —"], ...list.map((p) => [p.full_name, p.position ? `${p.full_name} · ${p.position}` : p.full_name])];
+function personSelect(name, label, list, selected, hint = "", required = true) {
+  const opts = [["", required ? "— เลือกชื่อ —" : "— ไม่ระบุ —"], ...list.map((p) => [p.full_name, p.position ? `${p.full_name} · ${p.position}` : p.full_name])];
   if (selected && !list.some((p) => p.full_name === selected)) opts.push([selected, selected]);
-  return fieldHtml({ name, label, type: "select", required: true, options: opts, value: selected, hint });
+  return fieldHtml({ name, label, type: "select", required, options: opts, value: selected, hint });
 }
 const positionOf = (list, name, fallback = null) => list.find((p) => p.full_name === name)?.position ?? fallback;
 const centralDefault = (central, current) => current || central.find((p) => p.full_name === me.full_name)?.full_name || "";
@@ -312,7 +312,7 @@ async function editPeople(doc) {
     positions = pos;
   } catch (e) { return toast(e.message, true); }
   const need = { requester: true, approver: ["approved", "issued", "rejected"].includes(doc.status),
-    issuer: doc.status === "issued", receiver: doc.status === "issued" };
+    issuer: doc.status === "issued", receiver: false };
   const datalist = (id, values) => `<datalist id="${id}">${[...new Set(values)].map((v) => `<option value="${esc(v)}">`).join("")}</datalist>`;
   const inner = ROLES.map((r) => `<div class="fields two person-edit">
       <h3>${r.key === "approver" && doc.status === "rejected" ? "ผู้พิจารณา" : r.label}</h3>
@@ -364,7 +364,7 @@ async function openRequisition(id, mode = "view") {
       · จ่ายได้ตามจำนวนที่ใส่ คงเหลือจะหยุดที่ 0 และบันทึกจำนวนที่ขาดไว้ในประวัติสต็อก</p>`;
     body += `<div class="fields step two">
       ${personSelect("issuer_name", "ผู้จ่าย", central, centralDefault(central, doc.issuer_name), "จากทะเบียนเจ้าหน้าที่คลังกลาง")}
-      ${personSelect("receiver_name", "ผู้รับของ", receivers, doc.receiver_name || "", "คนที่มารับของจากคลัง · จากทะเบียนผู้รับสินค้า")}
+      ${personSelect("receiver_name", "ผู้รับของ", receivers, doc.receiver_name || "", "เว้นว่างได้ · คนที่มารับของจากคลัง จากทะเบียนผู้รับสินค้า", false)}
     </div>`;
     submit = "ยืนยันจ่ายของ (ตัดสต็อก)";
   } else if (mode === "price") {
