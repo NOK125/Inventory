@@ -1833,16 +1833,23 @@ def board_export(ctx, body, query):
             detail.append([doc["doc_no"], th_date(doc["created_at"], True), doc["department_name"], doc["requester_name"] or "",
                            REQ_TYPE_TH.get(doc["req_type"], ""), STATUS[doc["status"]], l["warehouse_name"],
                            l["code"], l["name"], l["unit"], l["qty_requested"], approved, l["stock"]])
-            t = total.setdefault(l["item_id"], {"line": l, "docs": set(), "req": 0, "appr": 0})
+            t = total.setdefault(l["item_id"], {"line": l, "docs": set(), "req": 0, "appr": 0, "dept": {}})
             t["docs"].add(doc["id"])
+            t["dept"][doc["department_name"]] = t["dept"].get(doc["department_name"], 0) + (approved or 0)
             t["req"] += l["qty_requested"] or 0
             t["appr"] += approved or 0
     items = sorted(total.values(), key=lambda t: (t["line"]["warehouse_id"], t["line"]["code"]))
     summary_rows = [[t["line"]["code"], t["line"]["name"], t["line"]["warehouse_name"], t["line"]["unit"], len(t["docs"]),
-                     t["req"], t["appr"], t["line"]["stock"], "เกินคงเหลือ" if t["appr"] > t["line"]["stock"] else ""] for t in items]
+                     t["req"], t["appr"], t["line"]["stock"], "เกินคงเหลือ" if t["appr"] > t["line"]["stock"] else "",
+                     ", ".join(f"{k} {v:g}" for k, v in t["dept"].items())] for t in items]
+    # ตารางไขว้: แถว = สินค้า, คอลัมน์ = หน่วยงานที่เบิก (จำนวนอนุมัติ)
+    depts = sorted({k for t in items for k in t["dept"]})
+    by_dept = [[t["line"]["code"], t["line"]["name"], t["line"]["unit"]] + [t["dept"].get(k, "") for k in depts] + [t["appr"]]
+               for t in items]
     status_th = {"open": "รออนุมัติและอนุมัติแล้ว รอจ่าย", "pending": "รออนุมัติ", "approved": "อนุมัติแล้ว รอจ่าย"}
     sheets = [
-        ("สรุปตามรายการ", [["รหัส", "รายการ", "คลัง", "หน่วย", "จำนวนใบเบิก", "ขอเบิกรวม", "อนุมัติรวม", "คงเหลือ", "หมายเหตุ"]] + summary_rows),
+        ("สรุปตามรายการ", [["รหัส", "รายการ", "คลัง", "หน่วย", "จำนวนใบเบิก", "ขอเบิกรวม", "อนุมัติรวม", "คงเหลือ", "หมายเหตุ", "หน่วยงานที่เบิก (จำนวนอนุมัติ)"]] + summary_rows),
+        ("แยกตามหน่วยงาน", [["รหัส", "รายการ", "หน่วย"] + depts + ["รวม"]] + by_dept),
         ("รายละเอียดใบเบิก", [["เลขที่", "วันที่ส่ง", "หน่วยงาน", "ผู้เบิก", "ประเภท", "สถานะ", "คลัง",
                               "รหัส", "รายการ", "หน่วย", "ขอเบิก", "อนุมัติ", "คงเหลือ"]] + detail),
         ("ข้อมูลไฟล์", [["หัวข้อ", "ค่า"], ["คลัง", wh_name],

@@ -1304,7 +1304,7 @@ function openBoardExcel(docs, filter) {
     && d.lines.some((l) => !wh || l.warehouse_id === Number(wh))).length;
   openForm({
     title: "ดาวน์โหลดใบเบิกเป็น Excel",
-    intro: `<p class="hint">รวมรายการที่ขอเบิกจากคลังที่เลือก มี 2 ชีต: สรุปตามรายการสินค้า และรายละเอียดแต่ละใบเบิก</p>`,
+    intro: `<p class="hint">รวมรายการที่ขอเบิกจากคลังที่เลือก มีชีตสรุปตามรายการสินค้า ชีตแยกตามหน่วยงานที่เบิก และรายละเอียดแต่ละใบเบิก</p>`,
     fields: [
       { name: "warehouse_id", label: "คลัง", type: "select",
         options: [["", "ทุกคลัง"], ...warehouses.map((w) => [String(w.id), w.name])] },
