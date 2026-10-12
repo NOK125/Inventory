@@ -1954,27 +1954,46 @@ async function stockView() {
       ${latest ? `<b>สินค้าคงคลัง ณ ${whenDT(latest.report_at)}</b>` : "<b>ยังไม่มีข้อมูลสินค้าคงคลัง</b>"}
       <span>อัปเดตวันนี้แล้ว ${doneToday} จาก ${warehouses.length} คลัง</span>
     </div>
-    ${stockDashHtml(summary)}
-    <div class="stock-grid">${warehouses.map((w) => {
-      const list = byWh.get(w.id);
-      const cur = list[0];
-      const fresh = cur && cur.report_at.slice(0, 10) === today;
-      return `<section class="panel stock-box">
-        <div class="stock-head">${whIco(w)}<b>${esc(w.name)}</b>
-          ${cur ? `<span class="badge ${fresh ? "ok" : "warn"}">${fresh ? "วันนี้" : "ยังไม่อัปเดตวันนี้"}</span>` : ""}</div>
-        ${cur ? `<div class="stock-when">ยอด ณ ${whenDT(cur.report_at)}</div>
-          ${stockCountsHtml(sumOf.get(w.id))}
-          <a class="btn outline block" href="${stockFileUrl(cur)}" target="_blank" rel="noopener"><span class="tag">PDF</span>เปิดยอดคงคลัง</a>
-          ${list.length > 1 ? `<select class="stock-old" aria-label="ดูยอดวันก่อนหน้า ${esc(w.name)}">
-            <option value="">ดูวันก่อนหน้า (${list.length - 1})</option>
-            ${list.slice(1).map((r) => `<option value="${r.id}">${when(r.report_at, false)} ${r.report_at.slice(11, 16)} น.</option>`).join("")}</select>` : ""}`
-          : `<p class="empty">ยังไม่มีไฟล์</p>`}
-        ${admin ? `<div class="stock-admin">
-          <button type="button" class="btn primary small" data-act="up" data-id="${w.id}">อัปโหลด PDF</button>
-          ${cur ? `<button type="button" class="btn small danger" data-act="del" data-id="${cur.id}" title="ลบไฟล์ล่าสุดของคลังนี้">ลบไฟล์ล่าสุด</button>` : ""}
-        </div>` : ""}
-      </section>`;
-    }).join("")}</div>`;
+    <div class="stock-layout">
+      <aside class="panel stock-side" aria-label="นำเข้ายอดคงคลังแต่ละคลัง">
+        <div class="stock-side-head">
+          <b>นำเข้ายอดคงคลัง (PDF)</b>
+          <span>อัปเดตวันนี้ ${doneToday}/${warehouses.length} คลัง</span>
+          <div class="stock-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${warehouses.length}" aria-valuenow="${doneToday}">
+            <i style="width:${warehouses.length ? Math.round((doneToday / warehouses.length) * 100) : 0}%"></i></div>
+        </div>
+        <ul class="stock-rows">${warehouses.map((w) => {
+          const list = byWh.get(w.id);
+          const cur = list[0];
+          const fresh = cur && cur.report_at.slice(0, 10) === today;
+          const x = sumOf.get(w.id);
+          const info = !cur ? "ยังไม่มีไฟล์"
+            : `${when(cur.report_at, false)} ${cur.report_at.slice(11, 16)} น.${x?.items.length ? ` · ${num(x.items.length)} รายการ` : " · อ่านรายการไม่ได้"}`;
+          return `<li class="stock-row ${cur ? "" : "empty-row"}" data-wh="${w.id}">
+            <div class="stock-row-main">
+              ${whIco(w, "md")}
+              <div class="stock-row-text">
+                <b>${esc(w.name)}</b>
+                <small>${esc(info)}</small>
+              </div>
+              <span class="dot ${!cur ? "none" : fresh ? "ok" : "warn"}" title="${!cur ? "ยังไม่มีไฟล์" : fresh ? "อัปเดตวันนี้แล้ว" : "ยังไม่อัปเดตวันนี้"}"></span>
+            </div>
+            <div class="stock-row-acts">
+              ${x?.items.length ? `<button type="button" class="btn small outline" data-act="stock-list" data-id="${w.id}">ดูรายการ</button>` : ""}
+              ${cur ? `<a class="btn small outline" href="${stockFileUrl(cur)}" target="_blank" rel="noopener"><span class="tag">PDF</span>เปิด</a>` : ""}
+              ${list.length > 1 ? `<select class="stock-old" aria-label="ดูยอดวันก่อนหน้า ${esc(w.name)}">
+                <option value="">ย้อนหลัง (${list.length - 1})</option>
+                ${list.slice(1).map((r) => `<option value="${r.id}">${when(r.report_at, false)} ${r.report_at.slice(11, 16)} น.</option>`).join("")}</select>` : ""}
+              ${admin ? `<span class="stock-row-admin">
+                <button type="button" class="btn primary small" data-act="up" data-id="${w.id}">${cur ? "อัปโหลดใหม่" : "อัปโหลด PDF"}</button>
+                ${cur ? `<button type="button" class="icon-x" data-act="del" data-id="${cur.id}" title="ลบไฟล์ล่าสุดของ ${esc(w.name)}" aria-label="ลบไฟล์ล่าสุดของ ${esc(w.name)}">×</button>` : ""}
+              </span>` : ""}
+            </div>
+          </li>`;
+        }).join("")}</ul>
+      </aside>
+      <div class="stock-main">${stockDashHtml(summary) || `<section class="panel stock-dash"><p class="empty">ยังไม่มีข้อมูลรายการสินค้า · ${admin ? "อัปโหลดไฟล์ PDF ยอดคงคลังจากแถบด้านซ้าย" : "รอผู้ดูแลคลังอัปโหลดไฟล์ยอดคงคลัง"}</p></section>`}</div>
+    </div>`;
 
   wireStockDash(summary);
   view.onchange = (e) => {
@@ -1988,7 +2007,7 @@ async function stockView() {
       const sel = document.getElementById("sd-wh");
       sel.value = id;
       sel.dispatchEvent(new Event("change", { bubbles: false }));
-      document.getElementById("stock-dash").scrollIntoView({ behavior: "smooth", block: "start" });
+      if (window.innerWidth < 900) document.getElementById("stock-dash").scrollIntoView({ behavior: "smooth", block: "start" });
     },
     del: async (id) => {
       const r = reports.find((x) => String(x.id) === String(id));
@@ -2004,15 +2023,6 @@ const STOCK_SHOW = 300;
 const stockDash = { q: "", wh: "", f: "all" };
 const stockRowsOf = (summary) => summary.flatMap((x) => x.items.map((i) => ({ ...i, warehouse_id: x.warehouse_id })));
 const stockDelta = (i) => (i.prev_qty == null || i.qty == null ? null : i.qty - i.prev_qty);
-
-function stockCountsHtml(x) {
-  if (!x) return "";
-  if (!x.items.length) return `<div class="stock-counts muted">อ่านรายการจากไฟล์นี้ไม่ได้ · เปิดดูจาก PDF</div>`;
-  const out = x.items.filter((i) => !i.qty).length;
-  return `<div class="stock-counts"><span><b>${num(x.items.length)}</b> รายการ</span>
-    <span class="ok"><b>${num(x.items.length - out)}</b> มีของ</span><span class="bad"><b>${num(out)}</b> หมด</span>
-    <button type="button" class="link" data-act="stock-list" data-id="${x.warehouse_id}">ดูรายการ</button></div>`;
-}
 
 function stockDashHtml(summary) {
   const all = stockRowsOf(summary);
@@ -2044,6 +2054,7 @@ function wireStockDash(summary) {
   if (!box) return;
   const all = stockRowsOf(summary);
   const draw = () => {
+    document.querySelectorAll(".stock-row").forEach((r) => r.classList.toggle("active", r.dataset.wh === String(stockDash.wh)));
     const q = stockDash.q.trim().toLowerCase();
     const hits = all.filter((i) => (!stockDash.wh || String(i.warehouse_id) === String(stockDash.wh))
       && (stockDash.f === "all" || (stockDash.f === "has" ? i.qty > 0 : stockDash.f === "out" ? !i.qty : stockDelta(i)))
