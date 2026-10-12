@@ -986,7 +986,9 @@ async function requisitionsView() {
 // แถว = สินค้า คอลัมน์ = ใบเบิกแต่ละหน่วยงาน รวมยอดอนุมัติเทียบกับคงเหลือ
 
 // names: ชื่อผู้อนุมัติ/ผู้จ่ายที่แก้ในหน้านี้ แยกตามใบเบิก { [doc id]: { approver, issuer } }
-const board = { filter: "all", edits: {}, names: {}, scroll: [0, 0] };
+// mode: "doc" = แยกทีละใบ (รายการใบเบิกซ้าย รายละเอียดขวา) · "matrix" = มุมมองรวม สินค้า × ใบเบิก
+const board = { filter: "all", edits: {}, names: {}, scroll: [0, 0], mode: "doc", sel: null };
+try { board.mode = sessionStorage.getItem("board-mode") || "doc"; } catch {}
 
 async function approveView() {
   const [docs, central] = await Promise.all([api("GET", "/requisitions/board"), api("GET", "/people?kind=central")]);
@@ -1015,14 +1017,57 @@ async function approveView() {
       right: `<div class="head-btns"><button type="button" class="btn outline" data-act="pdf-history" title="ใบที่อนุมัติแล้วและจ่ายแล้ว เลือกตามวันที่อนุมัติ">PDF ย้อนหลัง</button>
         <button type="button" class="btn outline" data-act="pdf" id="pdf-btn" title="ดาวน์โหลดเฉพาะใบเบิกที่อนุมัติแล้ว"><span class="tag">PDF</span><span>ดาวน์โหลดสรุป (<span id="pdf-n">0</span> ใบ)</span></button></div>`,
     })}
-    <div class="board-bar"><div class="chips" id="filters"></div><span class="counts" id="counts"></span></div>
+    <div class="board-bar"><div class="chips" id="filters"></div><div class="chips mode-chips" id="modes"></div><span class="counts" id="counts"></span></div>
     <div class="matrix-wrap" id="matrix"></div>
     <datalist id="central-people">${central.map((p) => `<option value="${esc(p.full_name)}">${esc(p.position || "")}</option>`).join("")}</datalist>
     <div class="panel board-foot">
-      <span class="foot-hint">ใส่ชื่อผู้อนุมัติและผู้จ่ายที่หัวคอลัมน์ของแต่ละใบ เลือกจากทะเบียนเจ้าหน้าที่คลังกลางหรือพิมพ์เองได้</span>
+      <span class="foot-hint">ชื่อผู้อนุมัติและผู้จ่าย เลือกจากทะเบียนเจ้าหน้าที่คลังกลางหรือพิมพ์เองได้</span>
       <span class="over-msg" id="over-msg" role="status"></span>
       <button type="button" class="btn primary lg" data-act="approve-all" id="approve-all"></button>
     </div>`;
+
+  // มุมมองแยกทีละใบ: ซ้ายเป็นรายการใบเบิก ขวาเป็นรายละเอียดใบที่เลือก (ใช้ช่องจำนวน/ชื่อชุดเดียวกับมุมมองรวม)
+  const docSplit = (shown) => {
+    if (!shown.some((d) => String(d.id) === String(board.sel))) board.sel = (shown.find((d) => d.status === "pending") || shown[0]).id;
+    const d = docOf(board.sel);
+    const i = shown.indexOf(d);
+    const done = d.status === "approved";
+    const list = shown.map((x) => `<button type="button" class="doc-item ${x.status}" data-act="pick" data-id="${x.id}" aria-current="${x.id === d.id}">
+        <span class="di-top"><b>${esc(x.department_name)}</b>${statusBadge(x.status)}</span>
+        <span class="di-sub">${esc(x.doc_no)} · ${typeBadge(x.req_type)} · ${num(x.lines.length)} รายการ</span>
+        <small>${esc(x.requester_name || "")} · ${when(x.created_at)}</small></button>`).join("");
+    const rowsHtml = d.lines.map((l, n) => {
+      const v = val(d, l);
+      const changed = !done && Number(v) !== l.qty_requested;
+      return `<tr class="${Number(v) > l.stock ? "short" : ""}"><td>${n + 1}</td>
+        <td><span class="dl-name">${esc(l.name)}</span><small>${esc(l.code)} · ${esc(l.warehouse_name || "")}</small></td>
+        <td>${esc(l.unit)}</td><td class="num">${num(l.qty_requested)}</td>
+        <td class="num"><input class="qty-input ${changed ? "changed" : ""}" data-doc="${d.id}" data-line="${l.id}" value="${v}" inputmode="decimal"
+          ${done ? "disabled" : ""} aria-label="จำนวนอนุมัติ ${esc(l.name)}"></td>
+        <td class="num"><span class="${Number(v) > l.stock ? "minus" : ""}">${num(l.stock)}</span></td></tr>`;
+    }).join("");
+    return `<aside class="panel doc-list" aria-label="ใบเบิก">${list}</aside>
+      <section class="panel doc-detail">
+        <div class="dd-head">
+          <div><h2>${esc(d.department_name)}</h2>
+            <div class="dd-meta"><button type="button" class="link doc-link" data-act="open-doc" data-id="${d.id}" title="เปิดหน้าต่างใบเบิก (ไม่อนุมัติ/พิมพ์/แก้ไขชื่อ)">${esc(d.doc_no)}</button>
+              ${typeBadge(d.req_type)}${statusBadge(d.status)}<small>ผู้เบิก ${esc(d.requester_name || "-")} · ส่งเมื่อ ${when(d.created_at)}</small></div></div>
+          <div class="dd-nav"><button type="button" class="btn small" data-act="pick" data-id="${shown[i - 1]?.id ?? ""}" ${i > 0 ? "" : "disabled"}>‹ ก่อนหน้า</button>
+            <span>${i + 1} / ${shown.length}</span>
+            <button type="button" class="btn small" data-act="pick" data-id="${shown[i + 1]?.id ?? ""}" ${i < shown.length - 1 ? "" : "disabled"}>ถัดไป ›</button></div>
+        </div>
+        ${d.note ? `<p class="hint"><b>หมายเหตุ:</b> ${esc(d.note)}</p>` : ""}
+        <div class="dd-who">${whoInput(d, "approver", "ผู้อนุมัติ", "เลือกหรือพิมพ์ชื่อ")}${whoInput(d, "issuer", "ผู้จ่าย", "เว้นว่างได้ ใส่ตอนจ่าย")}</div>
+        <div class="table-wrap"><table class="dd-table"><thead><tr><th>#</th><th>รายการ</th><th>หน่วย</th><th class="num">ขอ</th><th class="num">อนุมัติ</th><th class="num">คงเหลือ</th></tr></thead>
+          <tbody>${rowsHtml}</tbody></table></div>
+        <div class="dd-actions">
+          ${done ? `<span class="muted">อนุมัติแล้ว รอจ่ายที่หน้า "ใบเบิก / จ่ายสินค้า" · ต้องการแก้จำนวน กด "ยกเลิกอนุมัติ"</span>
+              <button type="button" class="btn" data-act="unapprove" data-id="${d.id}">ยกเลิกอนุมัติ</button>`
+            : `<span class="muted">ช่องสีส้ม = อนุมัติต่างจากที่ขอ · ไม่อนุมัติทั้งใบ กดเลขที่ใบเบิก</span>
+              <button type="button" class="btn primary" data-act="approve-one" data-id="${d.id}">อนุมัติใบนี้</button>`}
+        </div>
+      </section>`;
+  };
 
   const draw = () => keepFocus(() => {
     const shown = docs.filter((d) => board.filter === "all" || d.req_type === board.filter);
@@ -1037,6 +1082,8 @@ async function approveView() {
 
     $("#filters").innerHTML = [["all", "ทั้งหมด"], ["emergency", "ฉุกเฉิน"], ["routine", "ตามรอบปกติ"]].map(([k, t]) =>
       `<button type="button" class="chip" data-act="filter" data-id="${k}" aria-pressed="${board.filter === k}">${t}</button>`).join("");
+    $("#modes").innerHTML = [["doc", "แยกทีละใบ"], ["matrix", "มุมมองรวม"]].map(([k, t]) =>
+      `<button type="button" class="chip" data-act="mode" data-id="${k}" aria-pressed="${board.mode === k}">${t}</button>`).join("");
     $("#counts").innerHTML = `รออนุมัติ <b style="color:var(--warn)">${docs.length - nApproved}</b> ใบ · อนุมัติแล้ว <b style="color:var(--info)">${nApproved}</b> ใบ`;
     $("#pdf-n").textContent = nApproved;
     $("#pdf-btn").disabled = !nApproved;
@@ -1046,6 +1093,14 @@ async function approveView() {
     all.disabled = !pendingShown.length || overCount > 0;
 
     const wrap = $("#matrix");
+    if (board.mode === "doc") {
+      wrap.className = "split-wrap";
+      wrap.innerHTML = shown.length ? docSplit(shown) : `<p class="empty panel">${docs.length ? "ไม่มีใบเบิกประเภทนี้" : "ไม่มีใบเบิกที่รออนุมัติหรือรอจ่าย"}</p>`;
+      const cur = $(".doc-item[aria-current=true]", wrap);
+      if (cur) cur.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    wrap.className = "matrix-wrap";
     const [left, top] = [wrap.scrollLeft, wrap.scrollTop];
     wrap.innerHTML = shown.length ? `<table class="matrix">
       <thead><tr><th class="lbl">สินค้า \\ ใบเบิก</th>
@@ -1092,7 +1147,7 @@ async function approveView() {
   });
   const missingApprover = (list) => list.find((d) => !nameOf(d, "approver").trim());
   const reload = () => {
-    board.scroll = [$("#matrix").scrollLeft, $("#matrix").scrollTop];
+    if (board.mode === "matrix") board.scroll = [$("#matrix").scrollLeft, $("#matrix").scrollTop];
     return approveView().catch((e) => toast(e.message, true));
   };
   const docOf = (id) => docs.find((d) => String(d.id) === String(id));
@@ -1126,13 +1181,23 @@ async function approveView() {
   };
   bind({
     filter: (k) => { board.filter = k; draw(); },
+    mode: (k) => { board.mode = k; try { sessionStorage.setItem("board-mode", k); } catch {} draw(); },
+    pick: (id) => { if (id) { board.sel = Number(id); draw(); } },
     // เปิดรายละเอียดใบเบิก (อนุมัติ/ไม่อนุมัติ/พิมพ์ได้จากหน้าต่างนั้น แล้วหน้านี้รีเฟรชเอง)
     "open-doc": (id) => openRequisition(id),
     "approve-one": async (id, b) => {
       const d = docOf(id);
       if (missingApprover([d])) return toast(`กรุณาใส่ชื่อผู้อนุมัติของ ${d.doc_no}`, true);
       b.disabled = true;
-      try { await approveDoc(d); toast(`อนุมัติ ${d.doc_no} (${d.department_name}) แล้ว`); } catch (e) { toast(e.message, true); }
+      try {
+        await approveDoc(d);
+        toast(`อนุมัติ ${d.doc_no} (${d.department_name}) แล้ว`);
+        // มุมมองแยกทีละใบ: ไปใบถัดไปที่ยังรออนุมัติ
+        const shown = docs.filter((x) => board.filter === "all" || x.req_type === board.filter);
+        const after = [...shown.slice(shown.indexOf(d) + 1), ...shown.slice(0, shown.indexOf(d))];
+        const next = after.find((x) => x.status === "pending");
+        if (board.mode === "doc" && next) board.sel = next.id;
+      } catch (e) { toast(e.message, true); }
       reload();
     },
     unapprove: async (id) => {

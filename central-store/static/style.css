@@ -427,6 +427,40 @@ input:disabled { background: var(--chip); color: var(--muted); }
 /* ---------- อนุมัติและสรุปการเบิก ---------- */
 .board-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 14px; }
 .board-bar .counts { margin-left: auto; font-size: 13.5px; color: var(--muted); }
+/* อนุมัติแบบแยกทีละใบ: รายการใบเบิกซ้าย รายละเอียดขวา */
+.mode-chips { margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--line); }
+.split-wrap { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; align-items: start; }
+.doc-list { max-height: calc(100vh - 270px); overflow-y: auto; padding: 6px; display: grid; gap: 4px; position: sticky; top: 16px; }
+.doc-item { display: grid; gap: 3px; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: none; border: 1px solid transparent; border-left: 4px solid var(--warn-line); border-radius: 10px; padding: 9px 11px; }
+.doc-item.approved { border-left-color: var(--info-line); }
+.doc-item:hover { background: var(--soft-2); }
+.doc-item[aria-current="true"] { background: var(--soft); border-color: var(--soft-line); border-left-color: var(--primary); }
+.di-top { display: flex; align-items: center; gap: 6px; }
+.di-top b { font-size: 14px; margin-right: auto; line-height: 1.3; }
+.di-top .badge, .di-sub .badge { font-size: 11px; padding: 1px 7px; }
+.di-sub { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.doc-item small { font-size: 11.5px; }
+.doc-detail { padding: 16px 18px; display: grid; gap: 12px; min-width: 0; }
+.dd-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; }
+.dd-head > div:first-child { margin-right: auto; min-width: 0; }
+.dd-head h2 { font-size: 19px; margin-bottom: 4px; }
+.dd-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dd-meta .doc-link { font-size: 14px; font-weight: 700; text-decoration: underline; padding: 0; }
+.dd-meta small { font-size: 12.5px; }
+.dd-nav { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.dd-who { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dd-who .who { display: grid; gap: 3px; }
+.dd-who .who span { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.dd-table td { vertical-align: middle; }
+.dd-table .dl-name { display: block; font-weight: 500; }
+.dd-table small { font-size: 12px; }
+.dd-table .qty-input { width: 96px; height: 34px; text-align: right; font-weight: 600; border-radius: 7px; padding: 0 8px; }
+.dd-table .qty-input.changed { border-color: var(--warn-line); color: var(--warn); }
+.dd-table .qty-input:disabled { background: var(--info-soft); border-color: var(--info-line); color: var(--text); }
+.dd-table tr.short td { background: var(--bad-soft); }
+.dd-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.dd-actions .muted { font-size: 13px; margin-right: auto; }
 .matrix-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: auto; max-height: calc(100vh - 290px); min-height: 240px; }
 .matrix { border-collapse: separate; border-spacing: 0; }
 .matrix th, .matrix td { border-bottom: 1px solid var(--line-soft); border-left: 1px solid var(--line-soft); padding: 6px 8px; }
@@ -668,6 +702,10 @@ body.auth main { padding: 0; }
   .inline-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
 @media (max-width: 900px) {
+  .split-wrap { grid-template-columns: minmax(0, 1fr); }
+  .doc-list { position: static; max-height: 230px; }
+  .dd-who { grid-template-columns: minmax(0, 1fr); }
+  .mode-chips { margin-left: 0; padding-left: 0; border-left: 0; }
   .shell { grid-template-columns: minmax(0, 1fr); }
   .side { position: static; height: auto; padding: 10px 12px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
   .side-brand { padding: 0; margin-right: auto; flex-direction: row; align-items: center; }
